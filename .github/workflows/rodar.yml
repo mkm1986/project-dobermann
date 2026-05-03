@@ -2,14 +2,10 @@ name: Fundo Quantitativo - Dobermann
 
 on:
   schedule:
-    # Horário de Brasília = UTC-3
-    # 05:00 BRT = 08:00 UTC
     - cron: '0 8 * * *'
-    # 12:00 BRT = 15:00 UTC
     - cron: '0 15 * * *'
-    # 23:00 BRT = 02:00 UTC (dia seguinte)
     - cron: '0 2 * * *'
-  workflow_dispatch: # permite rodar manualmente pelo GitHub
+  workflow_dispatch:
 
 jobs:
   executar:
@@ -26,9 +22,9 @@ jobs:
 
       - name: Instalar dependências
         run: |
-          pip install requests scipy numpy
+          pip install requests scipy numpy google-api-python-client google-auth google-auth-oauthlib
 
-      - name: Criar config.py com secrets
+      - name: Criar config.py
         run: |
           cat > config.py << 'EOF'
           RAPIDAPI_KEY        = ""
@@ -69,13 +65,10 @@ jobs:
           DATABASE_PATH       = "apostas.db"
           EOF
 
-      - name: Restaurar banco de dados
-        uses: actions/cache@v4
-        with:
-          path: apostas.db
-          key: apostas-db-${{ github.run_id }}
-          restore-keys: |
-            apostas-db-
+      - name: Baixar banco do Google Drive
+        env:
+          GOOGLE_TOKEN: ${{ secrets.GOOGLE_TOKEN }}
+        run: python drive_sync.py
 
       - name: Rodar coletor
         run: python coletor.py
@@ -86,8 +79,7 @@ jobs:
       - name: Rodar caçador
         run: python paper.py
 
-      - name: Salvar banco de dados
-        uses: actions/cache@v4
-        with:
-          path: apostas.db
-          key: apostas-db-${{ github.run_id }}
+      - name: Salvar banco no Google Drive
+        env:
+          GOOGLE_TOKEN: ${{ secrets.GOOGLE_TOKEN }}
+        run: python drive_sync.py subir
