@@ -8,6 +8,34 @@ def liquidar_apostas():
     conn = sqlite3.connect(config.DATABASE_PATH)
     c = conn.cursor()
 
+    # Garante que a tabela existe
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS paper_bets (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            data_registro  TEXT,
+            data_jogo      TEXT,
+            time_casa      TEXT,
+            time_fora      TEXT,
+            aposta_em      TEXT,
+            odd_aposta     REAL,
+            prob_modelo    REAL,
+            valor_aposta   REAL,
+            status         TEXT DEFAULT 'Pendente',
+            lucro          REAL DEFAULT 0.0,
+            event_id       TEXT,
+            liga           TEXT,
+            bookmaker      TEXT
+        )
+    """)
+    conn.commit()
+
+    c.execute("""
+        SELECT id, event_id, time_casa, time_fora, aposta_em,
+               odd_aposta, valor_aposta, data_jogo
+        FROM paper_bets
+        WHERE status = 'Pendente' AND event_id IS NOT NULL
+    """)
+
     c.execute("""
         SELECT id, event_id, time_casa, time_fora, aposta_em,
                odd_aposta, valor_aposta, data_jogo
