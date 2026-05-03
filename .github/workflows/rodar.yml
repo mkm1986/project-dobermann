@@ -1,0 +1,93 @@
+name: Fundo Quantitativo - Dobermann
+
+on:
+  schedule:
+    # Horário de Brasília = UTC-3
+    # 05:00 BRT = 08:00 UTC
+    - cron: '0 8 * * *'
+    # 12:00 BRT = 15:00 UTC
+    - cron: '0 15 * * *'
+    # 23:00 BRT = 02:00 UTC (dia seguinte)
+    - cron: '0 2 * * *'
+  workflow_dispatch: # permite rodar manualmente pelo GitHub
+
+jobs:
+  executar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar dependências
+        run: |
+          pip install requests scipy numpy
+
+      - name: Criar config.py com secrets
+        run: |
+          cat > config.py << 'EOF'
+          RAPIDAPI_KEY        = ""
+          ODDS_API_KEY        = "${{ secrets.ODDS_API_KEY }}"
+          ODDS_API_IO_KEY     = "${{ secrets.ODDS_API_IO_KEY }}"
+          TELEGRAM_TOKEN      = "${{ secrets.TELEGRAM_TOKEN }}"
+          TELEGRAM_CHAT_ID    = "${{ secrets.TELEGRAM_CHAT_ID }}"
+
+          LIGAS_PRINCIPAIS = [
+              "soccer_norway_eliteserien",
+              "soccer_sweden_allsvenskan",
+              "soccer_denmark_superliga",
+              "soccer_finland_veikkausliiga",
+              "soccer_ireland_premier_division",
+          ]
+          LIGAS_OBSCURAS = [
+              "soccer_iceland_premier_division",
+              "soccer_usa_usl_championship",
+          ]
+
+          KELLY_FRACAO        = 0.25
+          KELLY_FRACAO_ALTA   = 0.25
+          KELLY_FRACAO_BAIXA  = 0.35
+          MIN_EDGE_PRINCIPAL  = 0.02
+          MIN_EDGE_OBSCURO    = 0.04
+          MIN_EDGE            = 0.02
+          MIN_ODD_PRINCIPAL   = 2.50
+          MIN_ODD_OBSCURO     = 2.00
+          MIN_ODD_ML          = 2.00
+          MIN_ODD_DNB         = 1.80
+          MAX_ODD_PRINCIPAL   = 15.00
+          MAX_ODD_OBSCURO     = 35.00
+          MAX_ODD             = 35.00
+          MAX_EV              = 3.00
+          MIN_JOGOS_HISTORICO = 3
+          JANELA_HISTORICO    = 38
+          BANCA_ATUAL         = 1000.0
+          DATABASE_PATH       = "apostas.db"
+          EOF
+
+      - name: Restaurar banco de dados
+        uses: actions/cache@v4
+        with:
+          path: apostas.db
+          key: apostas-db-${{ github.run_id }}
+          restore-keys: |
+            apostas-db-
+
+      - name: Rodar coletor
+        run: python coletor.py
+
+      - name: Rodar liquidador
+        run: python liquidar.py
+
+      - name: Rodar caçador
+        run: python paper.py
+
+      - name: Salvar banco de dados
+        uses: actions/cache@v4
+        with:
+          path: apostas.db
+          key: apostas-db-${{ github.run_id }}
