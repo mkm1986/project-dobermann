@@ -2,9 +2,8 @@ name: Fundo Quantitativo - Dobermann
 
 on:
   schedule:
-    - cron: '0 8 * * *'
-    - cron: '0 15 * * *'
-    - cron: '0 2 * * *'
+    - cron: '0 8-23 * * *'
+    - cron: '0 0,1,2 * * *'
   workflow_dispatch:
 
 jobs:
