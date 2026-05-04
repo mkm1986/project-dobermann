@@ -16,7 +16,7 @@ def get_min_edge(liga):
     liga_lower = liga.lower()
     obscuras = ["cup", "copa", "pokal", "ykkonen", "esiliiga", "2nd", "3rd",
                 "2. liga", "3. liga", "1. deild", "fnl", "superettan",
-                "divize", "danmarksserien", "1. division"]
+                "divize", "danmarksserien", "1. division", "1st division"]
     if any(p in liga_lower for p in obscuras):
         return config.MIN_EDGE_OBSCURO
     return config.MIN_EDGE_PRINCIPAL
@@ -52,13 +52,13 @@ def rodar_paper_betting():
     sinais = odds_client.buscar_value_bets()
     print(f"   {len(sinais)} sinais nas ligas alvo\n")
 
-   if not sinais:
+    if not sinais:
         print("😴 Nenhum sinal encontrado nas ligas alvo no momento.")
         notificador.notificar_resumo(0, 0)
         conn.close()
         return
 
-    apostas_salvas   = 0
+    apostas_salvas    = 0
     apostas_ignoradas = 0
 
     print("🔍 ANALISANDO SINAIS:\n" + "-" * 55)
@@ -88,7 +88,7 @@ def rodar_paper_betting():
             continue
 
         # Valida com Dixon-Coles
-        prob_modelo = None
+        prob_modelo   = None
         time_casa_elo = None
         time_fora_elo = None
 
@@ -123,14 +123,13 @@ def rodar_paper_betting():
         else:
             print(f"   ⚠️  Times não encontrados no ELO — confiando só na API")
 
-        # Calcula valor com Kelly dinâmico
+        # Kelly dinâmico
         if prob_modelo:
             valor = round(calcular_kelly(prob_modelo, odd) * config.BANCA_ATUAL, 2)
         else:
-            # Sem modelo — deriva probabilidade real pelo EV da API vs Pinnacle
             prob_implicita = 1 / odd
-            prob_real = prob_implicita * (1 + ev_api)
-            valor = round(calcular_kelly(prob_real, odd) * config.BANCA_ATUAL, 2)
+            prob_real      = prob_implicita * (1 + ev_api)
+            valor          = round(calcular_kelly(prob_real, odd) * config.BANCA_ATUAL, 2)
 
         if valor <= 0:
             print(f"   ❌ Kelly = zero\n")
