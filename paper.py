@@ -52,8 +52,9 @@ def rodar_paper_betting():
     sinais = odds_client.buscar_value_bets()
     print(f"   {len(sinais)} sinais nas ligas alvo\n")
 
-    if not sinais:
+   if not sinais:
         print("😴 Nenhum sinal encontrado nas ligas alvo no momento.")
+        notificador.notificar_resumo(0, 0)
         conn.close()
         return
 
