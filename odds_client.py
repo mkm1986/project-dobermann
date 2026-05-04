@@ -1,5 +1,46 @@
 import requests
 import config
+import time
+import json
+import os
+
+# Cache em memória e arquivo
+_cache = {}
+CACHE_FILE = "cache_odds.json"
+CACHE_VALIDADE = 25 * 60  # 25 minutos em segundos
+
+def _carregar_cache():
+    """Carrega cache do arquivo se existir e for válido."""
+    global _cache
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, "r") as f:
+                dados = json.load(f)
+            # Verifica se ainda é válido
+            if time.time() - dados.get("timestamp", 0) < CACHE_VALIDADE:
+                _cache = dados
+                return True
+        except:
+            pass
+    return False
+
+def _salvar_cache(chave, valor):
+    """Salva resultado no cache."""
+    global _cache
+    _cache[chave] = valor
+    _cache["timestamp"] = time.time()
+    try:
+        with open(CACHE_FILE, "w") as f:
+            json.dump(_cache, f)
+    except:
+        pass
+
+def _cache_valido(chave):
+    """Verifica se o cache para uma chave é válido."""
+    if not _cache:
+        _carregar_cache()
+    ts = _cache.get("timestamp", 0)
+    return chave in _cache and time.time() - ts < CACHE_VALIDADE
 
 BASE = "https://api.odds-api.io/v3"
 
@@ -50,7 +91,20 @@ def buscar_value_bets(min_ev=None):
 
     for bookmaker in BOOKMAKERS:
         try:
-            resp = requests.get(f"{BASE}/value-bets", params={
+            resp = _carregar_cache()
+    todos_sinais = []
+
+    for bookmaker in BOOKMAKERS:
+        chave_cache = f"value_bets_{bookmaker}"
+
+        # Usa cache se válido
+        if _cache_valido(chave_cache):
+            print(f"   📦 Cache válido para {bookmaker} — sem request")
+            todos_sinais.extend(_cache[chave_cache])
+            continue
+
+        try:
+            resp = requests.get(f"{BASE}/value-bets", params={requests.get(f"{BASE}/value-bets", params={
                 "apiKey":              config.ODDS_API_IO_KEY,
                 "bookmaker":           bookmaker,
                 "includeEventDetails": "true",
@@ -112,6 +166,9 @@ def buscar_value_bets(min_ev=None):
                     "href":      odds_bm.get("href", ""),
                     "bookmaker": bookmaker,
                 })
+
+        # Salva no cache
+            _salvar_cache(chave_cache, [s for s in todos_sinais if s.get("bookmaker") == bookmaker])
 
         except Exception as e:
             print(f"⚠️ Erro ao buscar {bookmaker}: {e}")
