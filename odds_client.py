@@ -4,44 +4,6 @@ import time
 import json
 import os
 
-# Cache em memória e arquivo
-_cache = {}
-CACHE_FILE = "cache_odds.json"
-CACHE_VALIDADE = 25 * 60  # 25 minutos em segundos
-
-def _carregar_cache():
-    """Carrega cache do arquivo se existir e for válido."""
-    global _cache
-    if os.path.exists(CACHE_FILE):
-        try:
-            with open(CACHE_FILE, "r") as f:
-                dados = json.load(f)
-            # Verifica se ainda é válido
-            if time.time() - dados.get("timestamp", 0) < CACHE_VALIDADE:
-                _cache = dados
-                return True
-        except:
-            pass
-    return False
-
-def _salvar_cache(chave, valor):
-    """Salva resultado no cache."""
-    global _cache
-    _cache[chave] = valor
-    _cache["timestamp"] = time.time()
-    try:
-        with open(CACHE_FILE, "w") as f:
-            json.dump(_cache, f)
-    except:
-        pass
-
-def _cache_valido(chave):
-    """Verifica se o cache para uma chave é válido."""
-    if not _cache:
-        _carregar_cache()
-    ts = _cache.get("timestamp", 0)
-    return chave in _cache and time.time() - ts < CACHE_VALIDADE
-
 BASE = "https://api.odds-api.io/v3"
 
 BOOKMAKERS = ["Betano BR", "Bet365"]
@@ -73,6 +35,40 @@ LIGAS_PRINCIPAIS_NOMES = [
     "czech liga", "premiership"
 ]
 
+# Cache
+CACHE_FILE     = "cache_odds.json"
+CACHE_VALIDADE = 25 * 60  # 25 minutos
+_cache         = {}
+
+def _carregar_cache():
+    global _cache
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, "r") as f:
+                dados = json.load(f)
+            if time.time() - dados.get("timestamp", 0) < CACHE_VALIDADE:
+                _cache = dados
+                return True
+        except:
+            pass
+    return False
+
+def _salvar_cache(chave, valor):
+    global _cache
+    _cache[chave]      = valor
+    _cache["timestamp"] = time.time()
+    try:
+        with open(CACHE_FILE, "w") as f:
+            json.dump(_cache, f)
+    except:
+        pass
+
+def _cache_valido(chave):
+    if not _cache:
+        _carregar_cache()
+    ts = _cache.get("timestamp", 0)
+    return chave in _cache and time.time() - ts < CACHE_VALIDADE
+
 def get_max_odd(liga):
     if any(p in liga.lower() for p in LIGAS_OBSCURAS_NOMES):
         return config.MAX_ODD_OBSCURO
@@ -87,24 +83,19 @@ def buscar_value_bets(min_ev=None):
     if min_ev is None:
         min_ev = config.MIN_EDGE_PRINCIPAL
 
-    todos_sinais = []
-
-    for bookmaker in BOOKMAKERS:
-        try:
-            resp = _carregar_cache()
+    _carregar_cache()
     todos_sinais = []
 
     for bookmaker in BOOKMAKERS:
         chave_cache = f"value_bets_{bookmaker}"
 
-        # Usa cache se válido
         if _cache_valido(chave_cache):
             print(f"   📦 Cache válido para {bookmaker} — sem request")
-            todos_sinais.extend(_cache[chave_cache])
+            todos_sinais.extend(_cache.get(chave_cache, []))
             continue
 
         try:
-            resp = requests.get(f"{BASE}/value-bets", params={requests.get(f"{BASE}/value-bets", params={
+            resp = requests.get(f"{BASE}/value-bets", params={
                 "apiKey":              config.ODDS_API_IO_KEY,
                 "bookmaker":           bookmaker,
                 "includeEventDetails": "true",
@@ -120,6 +111,7 @@ def buscar_value_bets(min_ev=None):
                 print(f"⚠️ Resposta inesperada {bookmaker}: {dados}")
                 continue
 
+            sinais_bm = []
             for bet in dados:
                 ev_raw = bet.get("expectedValue", 0)
                 ev = (ev_raw / 100) - 1
@@ -128,8 +120,8 @@ def buscar_value_bets(min_ev=None):
                     continue
 
                 evento = bet.get("event", {})
-                liga = evento.get("league", "")
-                sport = evento.get("sport", "").lower()
+                liga   = evento.get("league", "")
+                sport  = evento.get("sport", "").lower()
 
                 if sport != "football":
                     continue
@@ -138,22 +130,21 @@ def buscar_value_bets(min_ev=None):
                 if any(ex in liga.lower() for ex in LIGAS_EXCLUIR):
                     continue
 
-                bet_side = bet.get("betSide")
-                market   = bet.get("market", {})
-                
-                # Filtra apenas mercado ML (Moneyline/1X2)
-                # Ignora DNB, Handicap Asiático e outros
+                bet_side    = bet.get("betSide")
+                market      = bet.get("market", {})
                 market_name = market.get("name", "")
+
+                # Filtra apenas Moneyline
                 if market_name not in ("ML", "1X2", ""):
                     continue
 
                 odds_bm = bet.get("bookmakerOdds", {})
-                odd = float(odds_bm.get(bet_side, 0) or 0)
+                odd     = float(odds_bm.get(bet_side, 0) or 0)
 
                 if odd < get_min_odd(liga) or odd > get_max_odd(liga):
                     continue
 
-                todos_sinais.append({
+                sinais_bm.append({
                     "event_id":  bet.get("eventId"),
                     "home":      evento.get("home"),
                     "away":      evento.get("away"),
@@ -162,18 +153,19 @@ def buscar_value_bets(min_ev=None):
                     "bet_side":  bet_side,
                     "odd":       odd,
                     "ev_api":    ev,
-                    "market":    market.get("name"),
+                    "market":    market_name,
                     "href":      odds_bm.get("href", ""),
                     "bookmaker": bookmaker,
                 })
 
-        # Salva no cache
-            _salvar_cache(chave_cache, [s for s in todos_sinais if s.get("bookmaker") == bookmaker])
+            _salvar_cache(chave_cache, sinais_bm)
+            todos_sinais.extend(sinais_bm)
 
         except Exception as e:
             print(f"⚠️ Erro ao buscar {bookmaker}: {e}")
             continue
 
+    # Remove duplicatas — mesmo event_id e bet_side, mantém maior odd
     vistos = {}
     for s in todos_sinais:
         chave = f"{s['event_id']}-{s['bet_side']}"
@@ -185,7 +177,7 @@ def buscar_value_bets(min_ev=None):
 def buscar_resultado(event_id):
     """
     Busca resultado em duas fontes.
-    Só aceita resultado se o jogo estiver COMPLETAMENTE finalizado.
+    Só aceita se o jogo estiver COMPLETAMENTE finalizado (fulltime confirmado).
     """
     # Tentativa 1: evento ainda na API
     try:
@@ -194,22 +186,20 @@ def buscar_resultado(event_id):
         }, timeout=15)
 
         if resp.status_code == 200:
-            dados = resp.json()
+            dados  = resp.json()
             status = dados.get("status", "")
 
             if status in ("finished", "completed", "settled"):
-                scores = dados.get("scores", {})
-                periods = scores.get("periods", {})
+                scores   = dados.get("scores", {})
+                periods  = scores.get("periods", {})
                 fulltime = periods.get("fulltime", {})
 
-                # Só aceita se tiver placar de tempo completo confirmado
                 if not fulltime:
-                    print(f"   ⚠️ Placar parcial detectado — aguardando fulltime")
+                    print(f"   ⚠️ Placar parcial — aguardando fulltime")
                     return None
 
                 gc = fulltime.get("home")
                 gf = fulltime.get("away")
-
                 if gc is not None and gf is not None:
                     return int(gc), int(gf)
 
@@ -225,13 +215,12 @@ def buscar_resultado(event_id):
         }, timeout=15)
 
         if resp2.status_code == 200:
-            dados2 = resp2.json()
-            scores = dados2.get("scores", {})
+            dados2   = resp2.json()
+            scores   = dados2.get("scores", {})
             if scores:
-                periods = scores.get("periods", {})
+                periods  = scores.get("periods", {})
                 fulltime = periods.get("fulltime", {})
 
-                # Só aceita se tiver placar fulltime
                 if not fulltime:
                     return None
 
