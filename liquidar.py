@@ -72,7 +72,14 @@ def liquidar_apostas():
         elif gols_fora > gols_casa:  vencedor = fora
         else:                         vencedor = "Empate"
 
-        if aposta_em == vencedor:
+        # Verifica vitória considerando nome parcial (times reserva têm nomes longos)
+        apostou_venceu = (
+            aposta_em == vencedor or
+            (vencedor != "Empate" and aposta_em.lower() in vencedor.lower()) or
+            (vencedor != "Empate" and vencedor.lower() in aposta_em.lower())
+        )
+
+        if apostou_venceu:
             status = "Ganhou"
             lucro  = round(valor * (odd - 1), 2)
         else:

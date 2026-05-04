@@ -10,6 +10,13 @@ def enviar(mensagem):
     }
     try:
         resp = requests.post(url, json=payload, timeout=10)
+        if resp.status_code == 429:
+            # Rate limit — aguarda e tenta novamente
+            import time
+            retry = resp.json().get("parameters", {}).get("retry_after", 5)
+            print(f"⚠️ Rate limit Telegram — aguardando {retry}s")
+            time.sleep(retry + 1)
+            resp = requests.post(url, json=payload, timeout=10)
         return resp.status_code == 200
     except Exception as e:
         print(f"⚠️ Erro ao enviar notificação: {e}")

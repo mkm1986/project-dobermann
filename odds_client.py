@@ -85,7 +85,14 @@ def buscar_value_bets(min_ev=None):
                     continue
 
                 bet_side = bet.get("betSide")
-                market = bet.get("market", {})
+                market   = bet.get("market", {})
+                
+                # Filtra apenas mercado ML (Moneyline/1X2)
+                # Ignora DNB, Handicap Asiático e outros
+                market_name = market.get("name", "")
+                if market_name not in ("ML", "1X2", ""):
+                    continue
+
                 odds_bm = bet.get("bookmakerOdds", {})
                 odd = float(odds_bm.get(bet_side, 0) or 0)
 
@@ -120,9 +127,8 @@ def buscar_value_bets(min_ev=None):
 
 def buscar_resultado(event_id):
     """
-    Tenta buscar resultado em duas fontes:
-    1. /events/{id} — evento ainda disponível
-    2. /historical/odds — fallback para eventos expirados
+    Busca resultado em duas fontes.
+    Só aceita resultado se o jogo estiver COMPLETAMENTE finalizado.
     """
     # Tentativa 1: evento ainda na API
     try:
@@ -133,22 +139,27 @@ def buscar_resultado(event_id):
         if resp.status_code == 200:
             dados = resp.json()
             status = dados.get("status", "")
+
             if status in ("finished", "completed", "settled"):
                 scores = dados.get("scores", {})
-                fulltime = scores.get("periods", {}).get("fulltime", {})
-                if fulltime:
-                    gc = fulltime.get("home")
-                    gf = fulltime.get("away")
-                else:
-                    gc = scores.get("home")
-                    gf = scores.get("away")
+                periods = scores.get("periods", {})
+                fulltime = periods.get("fulltime", {})
+
+                # Só aceita se tiver placar de tempo completo confirmado
+                if not fulltime:
+                    print(f"   ⚠️ Placar parcial detectado — aguardando fulltime")
+                    return None
+
+                gc = fulltime.get("home")
+                gf = fulltime.get("away")
+
                 if gc is not None and gf is not None:
                     return int(gc), int(gf)
 
     except Exception as e:
         print(f"⚠️ Erro /events: {e}")
 
-# Tentativa 2: historical/odds como fallback
+    # Tentativa 2: historical/odds como fallback
     try:
         resp2 = requests.get(f"{BASE}/historical/odds", params={
             "apiKey":     config.ODDS_API_IO_KEY,
@@ -160,18 +171,19 @@ def buscar_resultado(event_id):
             dados2 = resp2.json()
             scores = dados2.get("scores", {})
             if scores:
-                fulltime = scores.get("periods", {}).get("fulltime", {})
-                if fulltime:
-                    gc = fulltime.get("home")
-                    gf = fulltime.get("away")
-                else:
-                    gc = scores.get("home")
-                    gf = scores.get("away")
+                periods = scores.get("periods", {})
+                fulltime = periods.get("fulltime", {})
+
+                # Só aceita se tiver placar fulltime
+                if not fulltime:
+                    return None
+
+                gc = fulltime.get("home")
+                gf = fulltime.get("away")
                 if gc is not None and gf is not None:
                     return int(gc), int(gf)
 
     except Exception as e:
         print(f"⚠️ Erro /historical/odds: {e}")
 
-    # Retorna None — o liquidar.py decide se é expirado baseado na data
     return None
