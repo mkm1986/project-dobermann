@@ -35,9 +35,18 @@ LIGAS_PRINCIPAIS_NOMES = [
     "czech liga", "premiership"
 ]
 
+LIGAS_THE_ODDS_API = [
+    "soccer_norway_eliteserien",
+    "soccer_sweden_allsvenskan",
+    "soccer_denmark_superliga",
+    "soccer_finland_veikkausliiga",
+    "soccer_ireland_premier_division",
+    "soccer_iceland_premier_division",
+]
+
 # Cache
 CACHE_FILE     = "cache_odds.json"
-CACHE_VALIDADE = 25 * 60  # 25 minutos
+CACHE_VALIDADE = 25 * 60
 _cache         = {}
 
 def _carregar_cache():
@@ -55,7 +64,7 @@ def _carregar_cache():
 
 def _salvar_cache(chave, valor):
     global _cache
-    _cache[chave]      = valor
+    _cache[chave]       = valor
     _cache["timestamp"] = time.time()
     try:
         with open(CACHE_FILE, "w") as f:
@@ -79,12 +88,114 @@ def get_min_odd(liga):
         return config.MIN_ODD_PRINCIPAL
     return config.MIN_ODD_OBSCURO
 
+def buscar_value_bets_fallback(min_ev=None):
+    """Fallback usando The Odds API quando odds-api.io estiver indisponível."""
+    if min_ev is None:
+        min_ev = config.MIN_EDGE_PRINCIPAL
+
+    sinais = []
+
+    for liga_key in LIGAS_THE_ODDS_API:
+        try:
+            resp = requests.get(
+                f"https://api.the-odds-api.com/v4/sports/{liga_key}/odds/",
+                params={
+                    "apiKey":     config.ODDS_API_KEY,
+                    "regions":    "eu",
+                    "markets":    "h2h",
+                    "bookmakers": "pinnacle,betano,bet365",
+                },
+                timeout=15
+            )
+
+            if resp.status_code != 200:
+                continue
+
+            jogos = resp.json()
+
+            for jogo in jogos:
+                home     = jogo.get("home_team")
+                away     = jogo.get("away_team")
+                data     = jogo.get("commence_time")
+                event_id = jogo.get("id")
+
+                odd_pinnacle = {"home": 0, "away": 0, "draw": 0}
+                odds_softs   = {}
+
+                for bookie in jogo.get("bookmakers", []):
+                    key = bookie["key"]
+                    for market in bookie.get("markets", []):
+                        if market["key"] != "h2h":
+                            continue
+                        for outcome in market.get("outcomes", []):
+                            nome = outcome["name"]
+                            odd  = outcome["price"]
+                            side = "home" if nome == home else "away" if nome == away else "draw"
+
+                            if key == "pinnacle":
+                                odd_pinnacle[side] = odd
+                            elif key in ("betano", "bet365"):
+                                if key not in odds_softs:
+                                    odds_softs[key] = {}
+                                odds_softs[key][side] = odd
+
+                for side in ("home", "away", "draw"):
+                    odd_pin = odd_pinnacle.get(side, 0)
+                    if not odd_pin:
+                        continue
+
+                    prob_pin = 1 / odd_pin
+
+                    for bookie_key, odds_bm in odds_softs.items():
+                        odd_soft = odds_bm.get(side, 0)
+                        if not odd_soft:
+                            continue
+
+                        ev = (prob_pin * odd_soft) - 1
+
+                        if ev < min_ev or ev > config.MAX_EV:
+                            continue
+
+                        liga_nome = liga_key.replace("soccer_", "").replace("_", " ").title()
+
+                        if odd_soft < get_min_odd(liga_nome) or odd_soft > get_max_odd(liga_nome):
+                            continue
+
+                        bookmaker = "Betano BR" if bookie_key == "betano" else "Bet365"
+
+                        sinais.append({
+                            "event_id":  event_id,
+                            "home":      home,
+                            "away":      away,
+                            "liga":      liga_nome,
+                            "data":      data,
+                            "bet_side":  side,
+                            "odd":       odd_soft,
+                            "ev_api":    ev,
+                            "market":    "ML",
+                            "href":      "",
+                            "bookmaker": bookmaker,
+                        })
+
+        except Exception as e:
+            print(f"⚠️ Erro fallback {liga_key}: {e}")
+            continue
+
+    vistos = {}
+    for s in sinais:
+        chave = f"{s['event_id']}-{s['bet_side']}"
+        if chave not in vistos or s["odd"] > vistos[chave]["odd"]:
+            vistos[chave] = s
+
+    return list(vistos.values())
+
 def buscar_value_bets(min_ev=None):
     if min_ev is None:
         min_ev = config.MIN_EDGE_PRINCIPAL
 
     _carregar_cache()
     todos_sinais = []
+    erros_429    = 0
 
     for bookmaker in BOOKMAKERS:
         chave_cache = f"value_bets_{bookmaker}"
@@ -102,6 +213,11 @@ def buscar_value_bets(min_ev=None):
                 "sport":               "football",
             }, timeout=15)
 
+            if resp.status_code == 429:
+                print(f"⚠️ Erro {bookmaker} (429): {resp.text}")
+                erros_429 += 1
+                continue
+
             if resp.status_code != 200:
                 print(f"⚠️ Erro {bookmaker} ({resp.status_code}): {resp.text}")
                 continue
@@ -114,7 +230,7 @@ def buscar_value_bets(min_ev=None):
             sinais_bm = []
             for bet in dados:
                 ev_raw = bet.get("expectedValue", 0)
-                ev = (ev_raw / 100) - 1
+                ev     = (ev_raw / 100) - 1
 
                 if ev < min_ev or ev > config.MAX_EV:
                     continue
@@ -134,7 +250,6 @@ def buscar_value_bets(min_ev=None):
                 market      = bet.get("market", {})
                 market_name = market.get("name", "")
 
-                # Filtra apenas Moneyline
                 if market_name not in ("ML", "1X2", ""):
                     continue
 
@@ -165,7 +280,12 @@ def buscar_value_bets(min_ev=None):
             print(f"⚠️ Erro ao buscar {bookmaker}: {e}")
             continue
 
-    # Remove duplicatas — mesmo event_id e bet_side, mantém maior odd
+    # Se todos falharam com 429, usa fallback
+    if erros_429 == len(BOOKMAKERS) and not todos_sinais:
+        print("   🔄 odds-api.io indisponível — usando The Odds API como fallback...")
+        return buscar_value_bets_fallback(min_ev)
+
+    # Remove duplicatas
     vistos = {}
     for s in todos_sinais:
         chave = f"{s['event_id']}-{s['bet_side']}"
@@ -175,19 +295,15 @@ def buscar_value_bets(min_ev=None):
     return list(vistos.values())
 
 def buscar_resultado(event_id):
-    """
-    Busca resultado em duas fontes.
-    Só aceita se o jogo estiver COMPLETAMENTE finalizado (fulltime confirmado).
-    """
-    # Tentativa 1: evento ainda na API
+    """Busca resultado. Só aceita placar fulltime confirmado."""
     try:
         resp = requests.get(f"{BASE}/events/{event_id}", params={
             "apiKey": config.ODDS_API_IO_KEY,
         }, timeout=15)
 
         if resp.status_code == 200:
-            dados  = resp.json()
-            status = dados.get("status", "")
+            dados    = resp.json()
+            status   = dados.get("status", "")
 
             if status in ("finished", "completed", "settled"):
                 scores   = dados.get("scores", {})
@@ -206,7 +322,6 @@ def buscar_resultado(event_id):
     except Exception as e:
         print(f"⚠️ Erro /events: {e}")
 
-    # Tentativa 2: historical/odds como fallback
     try:
         resp2 = requests.get(f"{BASE}/historical/odds", params={
             "apiKey":     config.ODDS_API_IO_KEY,
