@@ -6,11 +6,17 @@ import odds_client
 import notificador
 
 def calcular_kelly(prob_vitoria, odd):
-    fracao = config.KELLY_FRACAO_ALTA if odd >= 3.00 else config.KELLY_FRACAO_BAIXA
+    fracao          = config.KELLY_FRACAO_ALTA if odd >= 3.00 else config.KELLY_FRACAO_BAIXA
     prob_derrota    = 1 - prob_vitoria
     lucro_potencial = odd - 1
     kelly_puro      = ((lucro_potencial * prob_vitoria) - prob_derrota) / lucro_potencial
     return max(0, kelly_puro * fracao)
+
+def aplicar_teto(valor):
+    """Aplica teto de segurança à aposta."""
+    teto = min(config.MAX_APOSTA_VALOR,
+               config.MAX_APOSTA_PERCENTUAL * config.BANCA_ATUAL)
+    return min(valor, teto)
 
 def get_min_edge(liga):
     liga_lower = liga.lower()
@@ -20,6 +26,13 @@ def get_min_edge(liga):
     if any(p in liga_lower for p in obscuras):
         return config.MIN_EDGE_OBSCURO
     return config.MIN_EDGE_PRINCIPAL
+
+def e_time_reserva(nome):
+    """Detecta se o time é reserva/filial pelo nome."""
+    indicadores = [" 2", " ii", " b ", " b)", "(b)", "reserva",
+                   "filial", "talang", "akatemia", "academy"]
+    nome_lower = nome.lower()
+    return any(ind in nome_lower for ind in indicadores)
 
 def rodar_paper_betting():
     conn = sqlite3.connect(config.DATABASE_PATH)
@@ -87,18 +100,23 @@ def rodar_paper_betting():
             print(f"   ⏭️  Já registrada\n")
             continue
 
+        # Detecta se é time reserva
+        aposta_time = home if bet_side == "home" else away
+        is_reserva  = e_time_reserva(aposta_time)
+
         # Valida com Dixon-Coles
         prob_modelo   = None
         time_casa_elo = None
         time_fora_elo = None
 
-        for nome in elos:
-            if nome.lower() in home.lower() or home.lower() in nome.lower():
-                time_casa_elo = nome
-            if nome.lower() in away.lower() or away.lower() in nome.lower():
-                time_fora_elo = nome
+        if not is_reserva:
+            for nome in elos:
+                if nome.lower() in home.lower() or home.lower() in nome.lower():
+                    time_casa_elo = nome
+                if nome.lower() in away.lower() or away.lower() in nome.lower():
+                    time_fora_elo = nome
 
-        if time_casa_elo and time_fora_elo:
+        if time_casa_elo and time_fora_elo and not is_reserva:
             jogos_c = jogos_por_time.get(time_casa_elo, 0)
             jogos_f = jogos_por_time.get(time_fora_elo, 0)
 
@@ -121,15 +139,24 @@ def rodar_paper_betting():
             else:
                 print(f"   ⚠️  Histórico insuficiente — confiando só na API")
         else:
-            print(f"   ⚠️  Times não encontrados no ELO — confiando só na API")
+            if is_reserva:
+                print(f"   ⚠️  Time reserva detectado — usando só EV da API")
+            else:
+                print(f"   ⚠️  Times não encontrados no ELO — confiando só na API")
 
-        # Kelly dinâmico
-        if prob_modelo:
+        # Calcula valor com Kelly dinâmico
+        if prob_modelo and not is_reserva:
             valor = round(calcular_kelly(prob_modelo, odd) * config.BANCA_ATUAL, 2)
         else:
             prob_implicita = 1 / odd
             prob_real      = prob_implicita * (1 + ev_api)
             valor          = round(calcular_kelly(prob_real, odd) * config.BANCA_ATUAL, 2)
+
+        # Aplica teto de segurança
+        valor_original = valor
+        valor          = round(aplicar_teto(valor), 2)
+        if valor < valor_original:
+            print(f"   🔒 Teto aplicado: R$ {valor_original:.2f} → R$ {valor:.2f}")
 
         if valor <= 0:
             print(f"   ❌ Kelly = zero\n")
