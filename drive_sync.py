@@ -6,16 +6,13 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 from google.oauth2.credentials import Credentials
 
 PASTA_ID      = "161T-JwbL9a2kLozkzlrH_b5LfJSawile"
-ARQUIVO_DB    = "apostas.db"
-NOME_DB_DRIVE = "apostas.db"
+ARQUIVOS      = ["apostas.db", "cache_odds.json"]
 
 def autenticar():
-    # GitHub Actions — usa variável de ambiente
     token_json = os.environ.get("GOOGLE_TOKEN")
     if token_json:
         info = json.loads(token_json)
     else:
-        # PC local — usa arquivo
         with open("token_drive.json") as f:
             info = json.load(f)
 
@@ -29,18 +26,18 @@ def autenticar():
     )
     return build("drive", "v3", credentials=creds)
 
-def buscar_arquivo_no_drive(service):
+def buscar_arquivo_no_drive(service, nome):
     resultado = service.files().list(
-        q=f"name='{NOME_DB_DRIVE}' and '{PASTA_ID}' in parents and trashed=false",
+        q=f"name='{nome}' and '{PASTA_ID}' in parents and trashed=false",
         fields="files(id, name, modifiedTime)"
     ).execute()
     arquivos = resultado.get("files", [])
     return arquivos[0] if arquivos else None
 
-def baixar_banco(service):
-    arquivo = buscar_arquivo_no_drive(service)
+def baixar_arquivo(service, nome):
+    arquivo = buscar_arquivo_no_drive(service, nome)
     if not arquivo:
-        print("📭 Nenhum banco encontrado no Drive — iniciando do zero.")
+        print(f"📭 {nome} não encontrado no Drive.")
         return False
 
     request    = service.files().get_media(fileId=arquivo["id"])
@@ -51,45 +48,47 @@ def baixar_banco(service):
     while not done:
         _, done = downloader.next_chunk()
 
-    with open(ARQUIVO_DB, "wb") as f:
+    with open(nome, "wb") as f:
         f.write(buffer.getvalue())
 
-    print(f"✅ Banco baixado do Drive ({arquivo['modifiedTime']})")
+    print(f"✅ {nome} baixado do Drive.")
     return True
 
-def subir_banco(service):
-    if not os.path.exists(ARQUIVO_DB):
-        print("⚠️ Banco local não encontrado.")
+def subir_arquivo(service, nome):
+    if not os.path.exists(nome):
+        print(f"⚠️ {nome} não encontrado localmente.")
         return False
 
-    arquivo_existente = buscar_arquivo_no_drive(service)
-    media = MediaFileUpload(ARQUIVO_DB, mimetype="application/octet-stream")
+    arquivo_existente = buscar_arquivo_no_drive(service, nome)
+    media = MediaFileUpload(nome, mimetype="application/octet-stream")
 
     if arquivo_existente:
         service.files().update(
             fileId     = arquivo_existente["id"],
             media_body = media
         ).execute()
-        print("✅ Banco atualizado no Drive.")
     else:
-        metadata = {"name": NOME_DB_DRIVE, "parents": [PASTA_ID]}
+        metadata = {"name": nome, "parents": [PASTA_ID]}
         service.files().create(
             body       = metadata,
             media_body = media,
             fields     = "id"
         ).execute()
-        print("✅ Banco criado no Drive.")
+
+    print(f"✅ {nome} salvo no Drive.")
     return True
 
 def sincronizar_antes():
-    print("🔄 Sincronizando banco do Drive...")
+    print("🔄 Sincronizando arquivos do Drive...")
     service = autenticar()
-    baixar_banco(service)
+    for nome in ARQUIVOS:
+        baixar_arquivo(service, nome)
 
 def sincronizar_depois():
-    print("🔄 Salvando banco no Drive...")
+    print("🔄 Salvando arquivos no Drive...")
     service = autenticar()
-    subir_banco(service)
+    for nome in ARQUIVOS:
+        subir_arquivo(service, nome)
 
 if __name__ == "__main__":
     import sys
