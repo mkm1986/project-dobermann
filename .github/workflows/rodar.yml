@@ -2,8 +2,8 @@ name: Fundo Quantitativo - Dobermann
 
 on:
   schedule:
-    - cron: '0 8-23 * * *'
-    - cron: '0 0,1,2 * * *'
+    - cron: '0 4-22 * * *'
+    - cron: '30 4-22 * * *'
   workflow_dispatch:
 
 jobs:
@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Baixar código
+      - name: Baixar codigo
         uses: actions/checkout@v4
 
       - name: Instalar Python
@@ -19,52 +19,51 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Instalar dependências
+      - name: Instalar dependencias
+        run: pip install requests scipy numpy google-api-python-client google-auth google-auth-oauthlib
+
+      - name: Criar config
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          ODDS_API_IO_KEY: ${{ secrets.ODDS_API_IO_KEY }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          pip install requests scipy numpy google-api-python-client google-auth google-auth-oauthlib
-
-      - - name: Criar config.py
-        run: |
-          cat > config.py << 'EOF'
-          RAPIDAPI_KEY        = ""
-          ODDS_API_KEY        = "${{ secrets.ODDS_API_KEY }}"
-          ODDS_API_IO_KEY     = "${{ secrets.ODDS_API_IO_KEY }}"
-          TELEGRAM_TOKEN      = "${{ secrets.TELEGRAM_TOKEN }}"
-          TELEGRAM_CHAT_ID    = "${{ secrets.TELEGRAM_CHAT_ID }}"
-
-          LIGAS_PRINCIPAIS = [
-              "soccer_norway_eliteserien",
-              "soccer_sweden_allsvenskan",
-              "soccer_denmark_superliga",
-              "soccer_finland_veikkausliiga",
-              "soccer_ireland_premier_division",
+          python - <<'PYEOF'
+          import os
+          lines = [
+              'RAPIDAPI_KEY = ""',
+              f'ODDS_API_KEY = "{os.environ["ODDS_API_KEY"]}"',
+              f'ODDS_API_IO_KEY = "{os.environ["ODDS_API_IO_KEY"]}"',
+              f'TELEGRAM_TOKEN = "{os.environ["TELEGRAM_TOKEN"]}"',
+              f'TELEGRAM_CHAT_ID = "{os.environ["TELEGRAM_CHAT_ID"]}"',
+              'LIGAS_PRINCIPAIS = ["soccer_norway_eliteserien","soccer_sweden_allsvenskan","soccer_denmark_superliga","soccer_finland_veikkausliiga","soccer_ireland_premier_division"]',
+              'LIGAS_OBSCURAS = ["soccer_iceland_premier_division","soccer_usa_usl_championship"]',
+              'KELLY_FRACAO = 0.25',
+              'KELLY_FRACAO_ALTA = 0.25',
+              'KELLY_FRACAO_BAIXA = 0.35',
+              'MIN_EDGE_PRINCIPAL = 0.02',
+              'MIN_EDGE_OBSCURO = 0.04',
+              'MIN_EDGE = 0.02',
+              'MIN_ODD_PRINCIPAL = 2.50',
+              'MIN_ODD_OBSCURO = 2.00',
+              'MIN_ODD_ML = 2.00',
+              'MIN_ODD_DNB = 1.80',
+              'MAX_ODD_PRINCIPAL = 15.00',
+              'MAX_ODD_OBSCURO = 35.00',
+              'MAX_ODD = 35.00',
+              'MAX_EV = 3.00',
+              'MIN_JOGOS_HISTORICO = 3',
+              'JANELA_HISTORICO = 38',
+              'BANCA_ATUAL = 1000.0',
+              'MAX_APOSTA_PERCENTUAL = 0.03',
+              'MAX_APOSTA_VALOR = 30.00',
+              'DATABASE_PATH = "apostas.db"',
           ]
-          LIGAS_OBSCURAS = [
-              "soccer_iceland_premier_division",
-              "soccer_usa_usl_championship",
-          ]
-
-          KELLY_FRACAO          = 0.25
-          KELLY_FRACAO_ALTA     = 0.25
-          KELLY_FRACAO_BAIXA    = 0.35
-          MIN_EDGE_PRINCIPAL    = 0.02
-          MIN_EDGE_OBSCURO      = 0.04
-          MIN_EDGE              = 0.02
-          MIN_ODD_PRINCIPAL     = 2.50
-          MIN_ODD_OBSCURO       = 2.00
-          MIN_ODD_ML            = 2.00
-          MIN_ODD_DNB           = 1.80
-          MAX_ODD_PRINCIPAL     = 15.00
-          MAX_ODD_OBSCURO       = 35.00
-          MAX_ODD               = 35.00
-          MAX_EV                = 3.00
-          MIN_JOGOS_HISTORICO   = 3
-          JANELA_HISTORICO      = 38
-          BANCA_ATUAL           = 1000.0
-          MAX_APOSTA_PERCENTUAL = 0.03
-          MAX_APOSTA_VALOR      = 30.00
-          DATABASE_PATH         = "apostas.db"
-          EOF
+          with open("config.py", "w") as f:
+              f.write("\n".join(lines))
+          print("config.py criado com sucesso")
+          PYEOF
 
       - name: Baixar banco do Google Drive
         env:
@@ -77,7 +76,7 @@ jobs:
       - name: Rodar liquidador
         run: python liquidar.py
 
-      - name: Rodar caçador
+      - name: Rodar cacador
         run: python paper.py
 
       - name: Salvar banco no Google Drive
