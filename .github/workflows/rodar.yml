@@ -23,7 +23,7 @@ jobs:
         run: |
           pip install requests scipy numpy google-api-python-client google-auth google-auth-oauthlib
 
-      - name: Criar config.py
+      - - name: Criar config.py
         run: |
           cat > config.py << 'EOF'
           RAPIDAPI_KEY        = ""
@@ -44,24 +44,26 @@ jobs:
               "soccer_usa_usl_championship",
           ]
 
-          KELLY_FRACAO        = 0.25
-          KELLY_FRACAO_ALTA   = 0.25
-          KELLY_FRACAO_BAIXA  = 0.35
-          MIN_EDGE_PRINCIPAL  = 0.02
-          MIN_EDGE_OBSCURO    = 0.04
-          MIN_EDGE            = 0.02
-          MIN_ODD_PRINCIPAL   = 2.50
-          MIN_ODD_OBSCURO     = 2.00
-          MIN_ODD_ML          = 2.00
-          MIN_ODD_DNB         = 1.80
-          MAX_ODD_PRINCIPAL   = 15.00
-          MAX_ODD_OBSCURO     = 35.00
-          MAX_ODD             = 35.00
-          MAX_EV              = 3.00
-          MIN_JOGOS_HISTORICO = 3
-          JANELA_HISTORICO    = 38
-          BANCA_ATUAL         = 1000.0
-          DATABASE_PATH       = "apostas.db"
+          KELLY_FRACAO          = 0.25
+          KELLY_FRACAO_ALTA     = 0.25
+          KELLY_FRACAO_BAIXA    = 0.35
+          MIN_EDGE_PRINCIPAL    = 0.02
+          MIN_EDGE_OBSCURO      = 0.04
+          MIN_EDGE              = 0.02
+          MIN_ODD_PRINCIPAL     = 2.50
+          MIN_ODD_OBSCURO       = 2.00
+          MIN_ODD_ML            = 2.00
+          MIN_ODD_DNB           = 1.80
+          MAX_ODD_PRINCIPAL     = 15.00
+          MAX_ODD_OBSCURO       = 35.00
+          MAX_ODD               = 35.00
+          MAX_EV                = 3.00
+          MIN_JOGOS_HISTORICO   = 3
+          JANELA_HISTORICO      = 38
+          BANCA_ATUAL           = 1000.0
+          MAX_APOSTA_PERCENTUAL = 0.03
+          MAX_APOSTA_VALOR      = 30.00
+          DATABASE_PATH         = "apostas.db"
           EOF
 
       - name: Baixar banco do Google Drive
