@@ -140,6 +140,7 @@ def coletar_tudo():
 
 # Slugs das ligas obscuras não cobertas pelo football-data.co.uk
 LIGAS_ODDS_API = [
+    # --- NÓRDICAS ---
     "norway-eliteserien",
     "norway-1st-division",
     "sweden-allsvenskan",
@@ -148,30 +149,106 @@ LIGAS_ODDS_API = [
     "denmark-1-division",
     "finland-veikkausliiga",
     "finland-ykkonen",
+    "finland-kakkonen-playoffs",
+    "finland-kolmonen",
     "iceland-besta-deild",
     "iceland-1-deild",
     "iceland-2-deild",
+
+    # --- ILHAS BRITÂNICAS ---
     "ireland-premier-division",
     "ireland-first-division",
+    "northern-ireland-premiership",
+    "wales-cymru-premier",
+    "scotland-championship",
+    "scotland-league-one",
+
+    # --- BÁLTICAS ---
     "estonia-premium-liiga",
     "estonia-esiliiga",
     "latvia-virsliga",
     "latvia-1liga",
     "lithuania-a-lyga",
     "lithuania-1-lyga",
+
+    # --- CENTRO-EUROPA ---
     "slovakia-superliga",
     "slovakia-2-liga",
     "slovakia-3-liga",
     "czechia-1-liga",
     "czechia-fnl",
+    "belgium-first-division-b",
+    "switzerland-challenge-league",
+
+    # --- COPAS EUROPEIAS ---
     "norway-nm-cup",
     "finland-suomen-cup",
     "sweden-svenska-cup",
     "denmark-dbu-pokalen",
     "iceland-cup",
     "ireland-fai-cup",
+    "northern-ireland-irish-cup",
     "slovakia-slovensky-pohar",
     "czechia-cup",
+
+    # --- NOVOS MERCADOS EUROPEUS ---
+    "romania-superliga",
+    "romania-liga-2",
+    "romania-liga-3",
+    "romania-romania-cup",
+    "serbia-superliga",
+    "serbia-prva-liga",
+    "serbia-srpska-liga",
+    "serbia-serbian-cup",
+    "georgia-erovnuli-liga",
+    "georgia-erovnuli-liga-2",
+    "georgia-cup",
+    "faroe-islands-premier-league",
+    "faroe-islands-1st-deild",
+    "faroe-islands-logmanssteypid",
+    "gibraltar-national-league",
+    "gibraltar-rock-cup",
+    "moldova-super-liga",
+    "moldova-liga-1",
+    "moldova-cupa-moldovei",
+    "kosovo-superliga",
+    "kosovo-liga-e-pare",
+    "kosovo-kosovo-fa-cup",
+    "andorra-primera-divisio",
+    "andorra-second-divisio",
+    "andorra-copa-constitucio",
+    "san-marino-campionato-sammarinese",
+    "san-marino-coppa-titano",
+
+    # --- AMÉRICAS ---
+    "usa-usl-championship",
+    "usa-usl-league-one",
+    "canada-canadian-premier-league",
+
+    # --- AUSTRÁLIA — NPL e ligas estaduais ---
+    "australia-capital-npl-1",
+    "australia-northern-nsw-npl",
+    "australia-northern-nsw-league-one",
+    "australia-northern-territory-premier-league",
+    "australia-nsw-npl-1",
+    "australia-nsw-league-one",
+    "australia-nsw-league-two",
+    "australia-queensland-npl",
+    "australia-queensland-premier-league-1",
+    "australia-queensland-premier-league-2",
+    "australia-south-australia-npl",
+    "australia-south-australia-state-league-1",
+    "australia-south-australia-state-league-2",
+    "australia-tasmania-npl",
+    "australia-tasmania-northern-championship",
+    "australia-tasmania-southern-championship",
+    "australia-victoria-npl",
+    "australia-victoria-premier-league-1",
+    "australia-victoria-premier-league-2",
+    "australia-western-australia-npl",
+    "australia-western-australia-state-league-1",
+    "australia-western-australia-state-league-2",
+    "australia-australia-cup-preliminary",
 ]
 
 def coletar_odds_api(dias=30):

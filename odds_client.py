@@ -9,9 +9,30 @@ BASE = "https://api.odds-api.io/v3"
 BOOKMAKERS = ["Betfair Sportsbook", "Bet365"]
 
 LIGAS_ALVO = [
-    "norway", "sweden", "denmark", "finland",
-    "iceland", "ireland", "estonia",
-    "czech", "slovakia", "latvia", "lithuania",
+    # Nórdicas
+    "norway", "sweden", "denmark", "finland", "iceland",
+    # Ilhas Britânicas
+    "ireland", "northern ireland", "wales", "scotland",
+    # Bálticas
+    "estonia", "latvia", "lithuania",
+    # Centro-Europa
+    "czech", "slovakia", "belgium", "switzerland",
+    # Novos mercados europeus
+    "romania", "serbia", "georgia", "faroe",
+    "gibraltar", "moldova", "kosovo", "andorra", "san marino",
+    # Américas
+    "usa", "canada",
+    # Austrália — NPL e ligas estaduais
+    "australia - capital npl",
+    "australia - northern nsw",
+    "australia - northern territory",
+    "australia - nsw",
+    "australia - queensland",
+    "australia - south australia",
+    "australia - tasmania",
+    "australia - victoria",
+    "australia - western australia",
+    "australia - australia cup",
 ]
 
 LIGAS_EXCLUIR = [
