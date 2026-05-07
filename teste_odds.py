@@ -1,24 +1,24 @@
-import sqlite3
+import requests
 import config
 
-conn = sqlite3.connect(config.DATABASE_PATH)
-c = conn.cursor()
+BASE = "https://api.odds-api.io/v3"
 
-# Remove duplicatas mantendo apenas o registro mais antigo por event_id
-c.execute("""
-    DELETE FROM paper_bets
-    WHERE id NOT IN (
-        SELECT MIN(id)
-        FROM paper_bets
-        GROUP BY event_id
-    )
-    AND status = 'Pendente'
-""")
+resp = requests.get(f"{BASE}/leagues", params={
+    "apiKey": config.ODDS_API_IO_KEY,
+    "sport":  "football",
+    "all":    "true",
+}, timeout=15)
 
-removidos = c.rowcount
-conn.commit()
-print(f"✅ {removidos} duplicatas removidas.")
+ligas = resp.json()
 
-c.execute("SELECT COUNT(*) FROM paper_bets WHERE status = 'Pendente'")
-print(f"Apostas pendentes restantes: {c.fetchone()[0]}")
-conn.close()
+PAISES_ALVO = [
+    "romania", "serbia", "georgia", "faroe",
+    "gibraltar", "moldova", "san marino", "andorra", "kosovo"
+]
+
+print("Ligas disponíveis nos países alvo:\n")
+for liga in ligas:
+    nome = liga.get("name", "")
+    slug = liga.get("slug", "")
+    if any(p in nome.lower() for p in PAISES_ALVO):
+        print(f"  {nome} | slug: {slug}")
