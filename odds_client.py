@@ -6,7 +6,7 @@ import os
 
 BASE = "https://api.odds-api.io/v3"
 
-BOOKMAKERS = ["Betano BR", "Bet365"]
+BOOKMAKERS = ["Betfair Sportsbook", "Bet365"]
 
 LIGAS_ALVO = [
     "norway", "sweden", "denmark", "finland",
@@ -139,7 +139,7 @@ def buscar_value_bets_fallback(min_ev=None):
                                     odds_softs[key] = {}
                                 odds_softs[key][side] = odd
 
-                for side in ("home", "away", "draw"):
+                for side in ("home", "away"):
                     odd_pin = odd_pinnacle.get(side, 0)
                     if not odd_pin:
                         continue
@@ -251,6 +251,10 @@ def buscar_value_bets(min_ev=None):
                 market_name = market.get("name", "")
 
                 if market_name not in ("ML", "1X2", ""):
+                    continue
+                    
+                # Nunca apostar em empate
+                if bet_side == "draw":
                     continue
 
                 odds_bm = bet.get("bookmakerOdds", {})
