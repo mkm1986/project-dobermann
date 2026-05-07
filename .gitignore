@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 venv/
 cache_odds.json
+*.json
+gerar_token.py
+token_drive.json
+main
