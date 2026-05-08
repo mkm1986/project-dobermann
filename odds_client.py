@@ -67,7 +67,7 @@ LIGAS_THE_ODDS_API = [
 
 # Cache
 CACHE_FILE     = "cache_odds.json"
-CACHE_VALIDADE = 25 * 60
+CACHE_VALIDADE = 55 * 60
 _cache         = {}
 
 def _carregar_cache():
