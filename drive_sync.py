@@ -1,12 +1,13 @@
 import os
 import io
 import json
+import time
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 from google.oauth2.credentials import Credentials
 
-PASTA_ID      = "161T-JwbL9a2kLozkzlrH_b5LfJSawile"
-ARQUIVOS      = ["apostas.db", "cache_odds.json"]
+PASTA_ID = "161T-JwbL9a2kLozkzlrH_b5LfJSawile"
+ARQUIVOS = ["apostas.db", "cache_odds.json"]
 
 def autenticar():
     token_json = os.environ.get("GOOGLE_TOKEN")
@@ -34,11 +35,28 @@ def buscar_arquivo_no_drive(service, nome):
     arquivos = resultado.get("files", [])
     return arquivos[0] if arquivos else None
 
-def baixar_arquivo(service, nome):
+def baixar_arquivo(service, nome, forcar=False):
     arquivo = buscar_arquivo_no_drive(service, nome)
     if not arquivo:
         print(f"📭 {nome} não encontrado no Drive.")
         return False
+
+    # Compara data de modificação
+    if not forcar and os.path.exists(nome):
+        from datetime import datetime, timezone
+        modified_drive = arquivo.get("modifiedTime", "")
+        modified_local = os.path.getmtime(nome)
+
+        try:
+            dt_drive = datetime.fromisoformat(
+                modified_drive.replace("Z", "+00:00")
+            ).timestamp()
+
+            if modified_local >= dt_drive:
+                print(f"⏭️  {nome} local é mais recente — mantendo versão local.")
+                return False
+        except:
+            pass
 
     request    = service.files().get_media(fileId=arquivo["id"])
     buffer     = io.BytesIO()
@@ -79,20 +97,32 @@ def subir_arquivo(service, nome):
     return True
 
 def sincronizar_antes():
+    """Baixa do Drive apenas se for mais recente que o arquivo local."""
     print("🔄 Sincronizando arquivos do Drive...")
     service = autenticar()
     for nome in ARQUIVOS:
         baixar_arquivo(service, nome)
 
 def sincronizar_depois():
+    """Sobe arquivos locais para o Drive."""
     print("🔄 Salvando arquivos no Drive...")
     service = autenticar()
     for nome in ARQUIVOS:
         subir_arquivo(service, nome)
 
+def sincronizar_forcar_download():
+    """Força download do Drive independente da data local."""
+    print("🔄 Forçando download do Drive...")
+    service = autenticar()
+    for nome in ARQUIVOS:
+        baixar_arquivo(service, nome, forcar=True)
+
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) > 1 and sys.argv[1] == "subir":
-        sincronizar_depois()
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "subir":
+            sincronizar_depois()
+        elif sys.argv[1] == "forcar":
+            sincronizar_forcar_download()
     else:
         sincronizar_antes()
