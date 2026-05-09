@@ -55,6 +55,7 @@ jobs:
               'BANCA_ATUAL = 1000.0',
               'MAX_APOSTA_PERCENTUAL = 0.03',
               'MAX_APOSTA_VALOR = 30.00',
+              'MIN_APOSTA_VALOR = 10.00',
               'DATABASE_PATH = "apostas.db"',
           ]
           with open("config.py", "w") as f:

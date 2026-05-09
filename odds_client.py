@@ -41,6 +41,10 @@ LIGAS_EXCLUIR = [
     "under 19", "under 18", "under 17",
     "under-19", "under-18", "under-17",
     "youth", "juvenil",
+    # Feminino — ELO masculino não se aplica
+    "women", "feminino", "femenino",
+    "kvinde", "damer", "naiset",
+    "toppserien", "damallsvenskan",
 ]
 
 LIGAS_OBSCURAS_NOMES = [

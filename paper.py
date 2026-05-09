@@ -13,10 +13,10 @@ def calcular_kelly(prob_vitoria, odd):
     return max(0, kelly_puro * fracao)
 
 def aplicar_teto(valor):
-    """Aplica teto de segurança à aposta."""
+    """Aplica teto e mínimo de segurança à aposta."""
     teto = min(config.MAX_APOSTA_VALOR,
                config.MAX_APOSTA_PERCENTUAL * config.BANCA_ATUAL)
-    return min(valor, teto)
+    return max(config.MIN_APOSTA_VALOR, min(valor, teto))
 
 def get_min_edge(liga):
     liga_lower = liga.lower()
