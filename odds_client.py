@@ -4,25 +4,23 @@ import time
 import json
 import os
 
-BASE = "https://api.odds-api.io/v3"
+# ─────────────────────────────────────────────
+# CONSTANTES
+# ─────────────────────────────────────────────
+
+BASE_ODDS_API_IO  = "https://api.odds-api.io/v3"
+BASE_THE_ODDS_API = "https://api.the-odds-api.com/v4"
 
 BOOKMAKERS = ["Betfair Sportsbook", "Bet365"]
 
 LIGAS_ALVO = [
-    # Nórdicas
     "norway", "sweden", "denmark", "finland", "iceland",
-    # Ilhas Britânicas
     "ireland", "northern ireland", "wales", "scotland",
-    # Bálticas
     "estonia", "latvia", "lithuania",
-    # Centro-Europa
     "czech", "slovakia", "belgium", "switzerland",
-    # Novos mercados europeus
     "romania", "serbia", "georgia", "faroe",
     "gibraltar", "moldova", "kosovo", "andorra", "san marino",
-    # Américas
     "usa", "canada",
-    # Austrália — NPL e ligas estaduais
     "australia - capital npl",
     "australia - northern nsw",
     "australia - northern territory",
@@ -41,7 +39,6 @@ LIGAS_EXCLUIR = [
     "under 19", "under 18", "under 17",
     "under-19", "under-18", "under-17",
     "youth", "juvenil",
-    # Feminino — ELO masculino não se aplica
     "women", "feminino", "femenino",
     "kvinde", "damer", "naiset",
     "toppserien", "damallsvenskan",
@@ -60,16 +57,47 @@ LIGAS_PRINCIPAIS_NOMES = [
     "czech liga", "premiership"
 ]
 
+# Ligas da The Odds API — usadas para buscar RESULTADOS (scores endpoint, gratuito)
+# e também como fallback de value bets quando odds-api.io falhar.
+# IMPORTANTE: os event_ids do banco são da odds-api.io e NÃO batem com os IDs
+# da The Odds API. Por isso buscamos por nome de time + data, não por ID.
 LIGAS_THE_ODDS_API = [
+    # Nórdicas
     "soccer_norway_eliteserien",
+    "soccer_norway_1st_division",
     "soccer_sweden_allsvenskan",
+    "soccer_sweden_superettan",
     "soccer_denmark_superliga",
+    "soccer_denmark_1st_division",
     "soccer_finland_veikkausliiga",
-    "soccer_ireland_premier_division",
+    "soccer_finland_ykkonen",
     "soccer_iceland_premier_division",
+    # Ilhas Britânicas
+    "soccer_ireland_premier_division",
+    "soccer_scotland_premier_league",
+    "soccer_scotland_championship",
+    "soccer_scotland_league1",
+    "soccer_northern_ireland_premier_league",
+    "soccer_wales_premier_league",
+    # Centro-Europa
+    "soccer_czech_republic_fl",
+    "soccer_czech_republic_fnl",
+    "soccer_slovakia_superliga",
+    # Bálticas
+    "soccer_estonia_meistriliiga",
+    # Américas
+    "soccer_usa_usl_championship",
+    "soccer_usa_usl_leagueone",
+    "soccer_canada_premier_league",
+    "soccer_canada_mls",
+    # Romênia
+    "soccer_romania_1",
 ]
 
-# Cache
+# ─────────────────────────────────────────────
+# CACHE (55 min — só para value bets)
+# ─────────────────────────────────────────────
+
 CACHE_FILE     = "cache_odds.json"
 CACHE_VALIDADE = 55 * 60
 _cache         = {}
@@ -103,6 +131,10 @@ def _cache_valido(chave):
     ts = _cache.get("timestamp", 0)
     return chave in _cache and time.time() - ts < CACHE_VALIDADE
 
+# ─────────────────────────────────────────────
+# HELPERS DE ODDS
+# ─────────────────────────────────────────────
+
 def get_max_odd(liga):
     if any(p in liga.lower() for p in LIGAS_OBSCURAS_NOMES):
         return config.MAX_ODD_OBSCURO
@@ -112,6 +144,188 @@ def get_min_odd(liga):
     if any(p in liga.lower() for p in LIGAS_PRINCIPAIS_NOMES):
         return config.MIN_ODD_PRINCIPAL
     return config.MIN_ODD_OBSCURO
+
+# ─────────────────────────────────────────────
+# BUSCA DE RESULTADOS — The Odds API (fonte primária)
+# ─────────────────────────────────────────────
+#
+# POR QUE The Odds API aqui?
+#   • 500 requests/mês praticamente sem uso
+#   • odds-api.io é limitada a 100/hora — reservada para value bets
+#   • The Odds API tem endpoint /scores gratuito — perfeito para liquidação
+#
+# POR QUE buscar por nome e não por event_id?
+#   • Os event_ids no banco são da odds-api.io (ex: 70674924)
+#   • A The Odds API usa UUIDs próprios (ex: a1b2c3d4e5f6...)
+#   • São sistemas diferentes — IDs não são compatíveis
+#   • Solução: match fuzzy por nome do time + data do jogo
+#
+
+def buscar_resultado_the_odds_api(home, away, data_jogo_str):
+    """
+    Busca placar via The Odds API — endpoint /scores.
+    Faz match por nome dos times pois os event_ids não são compatíveis.
+    Retorna (gols_casa, gols_fora) ou None.
+    """
+    home_lower = home.lower()
+    away_lower = away.lower()
+    data_str   = data_jogo_str[:10] if data_jogo_str else ""
+
+    for liga_key in LIGAS_THE_ODDS_API:
+        try:
+            resp = requests.get(
+                f"{BASE_THE_ODDS_API}/sports/{liga_key}/scores/",
+                params={
+                    "apiKey":   config.ODDS_API_KEY,
+                    "daysFrom": 3,
+                },
+                timeout=15
+            )
+
+            if resp.status_code == 401:
+                print(f"   ⚠️ The Odds API: chave inválida")
+                return None
+
+            if resp.status_code != 200:
+                continue
+
+            eventos = resp.json()
+            if not isinstance(eventos, list) or not eventos:
+                continue
+
+            for ev in eventos:
+                ev_home = ev.get("home_team", "").lower()
+                ev_away = ev.get("away_team", "").lower()
+                ev_data = ev.get("commence_time", "")[:10]
+
+                # Filtra por data
+                if data_str and ev_data != data_str:
+                    continue
+
+                # Match fuzzy por nome
+                home_match = (home_lower in ev_home or ev_home in home_lower)
+                away_match = (away_lower in ev_away or ev_away in away_lower)
+
+                if not (home_match and away_match):
+                    continue
+
+                # Encontrou — verifica se terminou
+                if not ev.get("completed", False):
+                    return None
+
+                scores = ev.get("scores")
+                if not scores:
+                    return None
+
+                gc = gf = None
+                for s in scores:
+                    s_name = s.get("name", "").lower()
+                    if s_name in ev_home or ev_home in s_name:
+                        gc = s.get("score")
+                    elif s_name in ev_away or ev_away in s_name:
+                        gf = s.get("score")
+
+                if gc is not None and gf is not None:
+                    return int(gc), int(gf)
+
+        except Exception as e:
+            print(f"   ⚠️ Erro The Odds API scores ({liga_key}): {e}")
+            continue
+
+    return None
+
+
+def buscar_resultado_odds_api_io(event_id):
+    """
+    Fallback: busca resultado via odds-api.io.
+    Usado apenas quando The Odds API não cobre a liga.
+    Consome cota — usar com parcimônia.
+    """
+    try:
+        resp = requests.get(
+            f"{BASE_ODDS_API_IO}/events/{event_id}",
+            params={"apiKey": config.ODDS_API_IO_KEY},
+            timeout=15
+        )
+
+        if resp.status_code == 200:
+            dados  = resp.json()
+            status = dados.get("status", "")
+
+            if status in ("finished", "completed", "settled"):
+                scores   = dados.get("scores", {})
+                periods  = scores.get("periods", {})
+                fulltime = periods.get("fulltime", {})
+
+                if not fulltime:
+                    print(f"   ⚠️ Placar parcial — aguardando fulltime")
+                    return None
+
+                gc = fulltime.get("home")
+                gf = fulltime.get("away")
+                if gc is not None and gf is not None:
+                    return int(gc), int(gf)
+
+            return None
+
+    except Exception as e:
+        print(f"   ⚠️ Erro odds-api.io /events: {e}")
+
+    # Segunda tentativa: historical/odds
+    try:
+        resp2 = requests.get(
+            f"{BASE_ODDS_API_IO}/historical/odds",
+            params={
+                "apiKey":     config.ODDS_API_IO_KEY,
+                "eventId":    str(event_id),
+                "bookmakers": "Bet365",
+            },
+            timeout=15
+        )
+
+        if resp2.status_code == 200:
+            dados2   = resp2.json()
+            scores   = dados2.get("scores", {})
+            if scores:
+                periods  = scores.get("periods", {})
+                fulltime = periods.get("fulltime", {})
+
+                if not fulltime:
+                    return None
+
+                gc = fulltime.get("home")
+                gf = fulltime.get("away")
+                if gc is not None and gf is not None:
+                    return int(gc), int(gf)
+
+    except Exception as e:
+        print(f"   ⚠️ Erro odds-api.io /historical/odds: {e}")
+
+    return None
+
+
+def buscar_resultado(event_id, home=None, away=None, data_jogo_str=None):
+    """
+    Ponto de entrada para busca de resultado.
+
+    Estratégia:
+      1. The Odds API /scores (grátis) — busca por nome de time
+      2. odds-api.io /events (fallback, consome cota) — busca por event_id
+    """
+    # Tentativa 1: The Odds API por nome de time (grátis)
+    if home and away:
+        resultado = buscar_resultado_the_odds_api(home, away, data_jogo_str or "")
+        if resultado is not None:
+            return resultado
+
+    # Tentativa 2: odds-api.io por event_id (fallback)
+    print(f"   🔄 The Odds API não encontrou — tentando odds-api.io...")
+    return buscar_resultado_odds_api_io(event_id)
+
+
+# ─────────────────────────────────────────────
+# VALUE BETS — fallback via The Odds API
+# ─────────────────────────────────────────────
 
 def buscar_value_bets_fallback(min_ev=None):
     """Fallback usando The Odds API quando odds-api.io estiver indisponível."""
@@ -123,7 +337,7 @@ def buscar_value_bets_fallback(min_ev=None):
     for liga_key in LIGAS_THE_ODDS_API:
         try:
             resp = requests.get(
-                f"https://api.the-odds-api.com/v4/sports/{liga_key}/odds/",
+                f"{BASE_THE_ODDS_API}/sports/{liga_key}/odds/",
                 params={
                     "apiKey":     config.ODDS_API_KEY,
                     "regions":    "eu",
@@ -156,7 +370,6 @@ def buscar_value_bets_fallback(min_ev=None):
                             nome = outcome["name"]
                             odd  = outcome["price"]
                             side = "home" if nome == home else "away" if nome == away else "draw"
-
                             if key == "pinnacle":
                                 odd_pinnacle[side] = odd
                             elif key in ("betano", "bet365"):
@@ -214,6 +427,11 @@ def buscar_value_bets_fallback(min_ev=None):
 
     return list(vistos.values())
 
+
+# ─────────────────────────────────────────────
+# VALUE BETS — fonte principal (odds-api.io)
+# ─────────────────────────────────────────────
+
 def buscar_value_bets(min_ev=None):
     if min_ev is None:
         min_ev = config.MIN_EDGE_PRINCIPAL
@@ -231,7 +449,7 @@ def buscar_value_bets(min_ev=None):
             continue
 
         try:
-            resp = requests.get(f"{BASE}/value-bets", params={
+            resp = requests.get(f"{BASE_ODDS_API_IO}/value-bets", params={
                 "apiKey":              config.ODDS_API_IO_KEY,
                 "bookmaker":           bookmaker,
                 "includeEventDetails": "true",
@@ -277,8 +495,7 @@ def buscar_value_bets(min_ev=None):
 
                 if market_name not in ("ML", "1X2", ""):
                     continue
-                    
-                # Nunca apostar em empate
+
                 if bet_side == "draw":
                     continue
 
@@ -309,12 +526,10 @@ def buscar_value_bets(min_ev=None):
             print(f"⚠️ Erro ao buscar {bookmaker}: {e}")
             continue
 
-    # Se todos falharam com 429, usa fallback
     if erros_429 == len(BOOKMAKERS) and not todos_sinais:
         print("   🔄 odds-api.io indisponível — usando The Odds API como fallback...")
         return buscar_value_bets_fallback(min_ev)
 
-    # Remove duplicatas
     vistos = {}
     for s in todos_sinais:
         chave = f"{s['event_id']}-{s['bet_side']}"
@@ -322,58 +537,3 @@ def buscar_value_bets(min_ev=None):
             vistos[chave] = s
 
     return list(vistos.values())
-
-def buscar_resultado(event_id):
-    """Busca resultado. Só aceita placar fulltime confirmado."""
-    try:
-        resp = requests.get(f"{BASE}/events/{event_id}", params={
-            "apiKey": config.ODDS_API_IO_KEY,
-        }, timeout=15)
-
-        if resp.status_code == 200:
-            dados    = resp.json()
-            status   = dados.get("status", "")
-
-            if status in ("finished", "completed", "settled"):
-                scores   = dados.get("scores", {})
-                periods  = scores.get("periods", {})
-                fulltime = periods.get("fulltime", {})
-
-                if not fulltime:
-                    print(f"   ⚠️ Placar parcial — aguardando fulltime")
-                    return None
-
-                gc = fulltime.get("home")
-                gf = fulltime.get("away")
-                if gc is not None and gf is not None:
-                    return int(gc), int(gf)
-
-    except Exception as e:
-        print(f"⚠️ Erro /events: {e}")
-
-    try:
-        resp2 = requests.get(f"{BASE}/historical/odds", params={
-            "apiKey":     config.ODDS_API_IO_KEY,
-            "eventId":    str(event_id),
-            "bookmakers": "Bet365",
-        }, timeout=15)
-
-        if resp2.status_code == 200:
-            dados2   = resp2.json()
-            scores   = dados2.get("scores", {})
-            if scores:
-                periods  = scores.get("periods", {})
-                fulltime = periods.get("fulltime", {})
-
-                if not fulltime:
-                    return None
-
-                gc = fulltime.get("home")
-                gf = fulltime.get("away")
-                if gc is not None and gf is not None:
-                    return int(gc), int(gf)
-
-    except Exception as e:
-        print(f"⚠️ Erro /historical/odds: {e}")
-
-    return None
