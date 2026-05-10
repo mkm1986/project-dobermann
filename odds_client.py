@@ -34,14 +34,18 @@ LIGAS_ALVO = [
 ]
 
 LIGAS_EXCLUIR = [
+    # Categorias de idade
     "u19", "u18", "u17", "u16", "u15",
-    "u-19", "u-18", "u-17",
-    "under 19", "under 18", "under 17",
-    "under-19", "under-18", "under-17",
+    "u-19", "u-18", "u-17", "u21", "u-21",
+    "under 19", "under 18", "under 17", "under 21",
     "youth", "juvenil",
+    # Feminino
     "women", "feminino", "femenino",
     "kvinde", "damer", "naiset",
+    "kansallinen liiga",
     "toppserien", "damallsvenskan",
+    # Reservas e amadores
+    "amateur", "reserves", "reservas",
 ]
 
 LIGAS_OBSCURAS_NOMES = [
