@@ -34,18 +34,14 @@ LIGAS_ALVO = [
 ]
 
 LIGAS_EXCLUIR = [
-    # Categorias de idade
     "u19", "u18", "u17", "u16", "u15",
-    "u-19", "u-18", "u-17", "u21", "u-21",
-    "under 19", "under 18", "under 17", "under 21",
+    "u-19", "u-18", "u-17",
+    "under 19", "under 18", "under 17",
+    "under-19", "under-18", "under-17",
     "youth", "juvenil",
-    # Feminino
     "women", "feminino", "femenino",
     "kvinde", "damer", "naiset",
-    "kansallinen liiga",
     "toppserien", "damallsvenskan",
-    # Reservas e amadores
-    "amateur", "reserves", "reservas",
 ]
 
 LIGAS_OBSCURAS_NOMES = [
@@ -61,42 +57,91 @@ LIGAS_PRINCIPAIS_NOMES = [
     "czech liga", "premiership"
 ]
 
-# Ligas da The Odds API — usadas para buscar RESULTADOS (scores endpoint, gratuito)
-# e também como fallback de value bets quando odds-api.io falhar.
-# IMPORTANTE: os event_ids do banco são da odds-api.io e NÃO batem com os IDs
-# da The Odds API. Por isso buscamos por nome de time + data, não por ID.
-LIGAS_THE_ODDS_API = [
-    # Nórdicas
-    "soccer_norway_eliteserien",
-    "soccer_norway_1st_division",
-    "soccer_sweden_allsvenskan",
-    "soccer_sweden_superettan",
-    "soccer_denmark_superliga",
-    "soccer_denmark_1st_division",
-    "soccer_finland_veikkausliiga",
-    "soccer_finland_ykkonen",
-    "soccer_iceland_premier_division",
-    # Ilhas Britânicas
-    "soccer_ireland_premier_division",
-    "soccer_scotland_premier_league",
-    "soccer_scotland_championship",
-    "soccer_scotland_league1",
-    "soccer_northern_ireland_premier_league",
-    "soccer_wales_premier_league",
-    # Centro-Europa
-    "soccer_czech_republic_fl",
-    "soccer_czech_republic_fnl",
-    "soccer_slovakia_superliga",
-    # Bálticas
-    "soccer_estonia_meistriliiga",
-    # Américas
-    "soccer_usa_usl_championship",
-    "soccer_usa_usl_leagueone",
-    "soccer_canada_premier_league",
-    "soccer_canada_mls",
+# ─────────────────────────────────────────────
+# MAPEAMENTO LIGA → KEY DA THE ODDS API
+#
+# Chave: fragmento do nome da liga como aparece no banco (campo liga)
+# Valor: key da The Odds API para o endpoint /scores
+#
+# IMPORTANTE: 1 request por aposta em vez de varrer todas as 20+ ligas.
+# Se a liga não estiver aqui, cai direto para o fallback odds-api.io.
+# ─────────────────────────────────────────────
+
+MAPA_LIGA_KEY = {
+    # Noruega
+    "norway - eliteserien":           "soccer_norway_eliteserien",
+    "norway - 1st division":          "soccer_norway_1st_division",
+    "norway - 1. divisjon":           "soccer_norway_1st_division",
+    # Suécia
+    "sweden - allsvenskan":           "soccer_sweden_allsvenskan",
+    "sweden - superettan":            "soccer_sweden_superettan",
+    # Dinamarca
+    "denmark - superliga":            "soccer_denmark_superliga",
+    "denmark - 1st division":         "soccer_denmark_1st_division",
+    "denmark - 1. division":          "soccer_denmark_1st_division",
+    # Finlândia
+    "finland - veikkausliiga":        "soccer_finland_veikkausliiga",
+    "finland - ykkonen":              "soccer_finland_ykkonen",
+    # Islândia
+    "iceland - besta deild":          "soccer_iceland_premier_division",
+    "iceland - premier division":     "soccer_iceland_premier_division",
+    "iceland - urvalsdeild":          "soccer_iceland_premier_division",
+    # Irlanda
+    "ireland - premier division":     "soccer_ireland_premier_division",
+    # Escócia
+    "scotland - premiership":         "soccer_scotland_premier_league",
+    "scotland - championship":        "soccer_scotland_championship",
+    "scotland - league one":          "soccer_scotland_league1",
+    "scotland - league 1":            "soccer_scotland_league1",
+    # Irlanda do Norte
+    "northern ireland - premiership": "soccer_northern_ireland_premier_league",
+    # País de Gales
+    "wales - cymru premier":          "soccer_wales_premier_league",
+    # Tcheca
+    "czechia - fortuna liga":         "soccer_czech_republic_fl",
+    "czechia - fnl":                  "soccer_czech_republic_fnl",
+    "czech republic - fortuna liga":  "soccer_czech_republic_fl",
+    # Eslováquia
+    "slovakia - superliga":           "soccer_slovakia_superliga",
+    # Estônia
+    "estonia - meistriliiga":         "soccer_estonia_meistriliiga",
+    "estonia - premium liiga":        "soccer_estonia_meistriliiga",
     # Romênia
-    "soccer_romania_1",
-]
+    "romania - superliga":            "soccer_romania_1",
+    # EUA
+    "usa - usl championship":         "soccer_usa_usl_championship",
+    "usa - usl league one":           "soccer_usa_usl_leagueone",
+    # Canadá
+    "canada - canadian premier league": "soccer_canada_premier_league",
+    "canada - canadian championship":   "soccer_canada_mls",
+}
+
+# Lista completa para fallback de value bets
+LIGAS_THE_ODDS_API = list(set(MAPA_LIGA_KEY.values()))
+
+
+def _resolver_key_liga(liga_nome):
+    """
+    Resolve o key da The Odds API a partir do nome da liga salvo no banco.
+    Tenta match exato primeiro, depois parcial.
+    Retorna o key ou None se não encontrado.
+    """
+    if not liga_nome:
+        return None
+
+    liga_lower = liga_nome.lower().strip()
+
+    # Match exato
+    if liga_lower in MAPA_LIGA_KEY:
+        return MAPA_LIGA_KEY[liga_lower]
+
+    # Match parcial — procura fragmento do mapa dentro do nome da liga
+    for fragmento, key in MAPA_LIGA_KEY.items():
+        if fragmento in liga_lower or liga_lower in fragmento:
+            return key
+
+    return None  # Liga não mapeada — vai para fallback odds-api.io
+
 
 # ─────────────────────────────────────────────
 # CACHE (55 min — só para value bets)
@@ -153,88 +198,91 @@ def get_min_odd(liga):
 # BUSCA DE RESULTADOS — The Odds API (fonte primária)
 # ─────────────────────────────────────────────
 #
-# POR QUE The Odds API aqui?
-#   • 500 requests/mês praticamente sem uso
-#   • odds-api.io é limitada a 100/hora — reservada para value bets
-#   • The Odds API tem endpoint /scores gratuito — perfeito para liquidação
-#
-# POR QUE buscar por nome e não por event_id?
-#   • Os event_ids no banco são da odds-api.io (ex: 70674924)
-#   • A The Odds API usa UUIDs próprios (ex: a1b2c3d4e5f6...)
-#   • São sistemas diferentes — IDs não são compatíveis
-#   • Solução: match fuzzy por nome do time + data do jogo
+# ESTRATÉGIA DE CUSTO:
+#   • Antes: varrendo 20+ ligas por aposta = 20+ requests por aposta
+#   • Agora: 1 request por aposta usando mapeamento liga → key
+#   • Se liga não está no mapa: cai para odds-api.io (fallback)
 #
 
-def buscar_resultado_the_odds_api(home, away, data_jogo_str):
+def buscar_resultado_the_odds_api(home, away, data_jogo_str, liga_nome=None):
     """
     Busca placar via The Odds API — endpoint /scores.
-    Faz match por nome dos times pois os event_ids não são compatíveis.
+    Usa mapeamento liga→key para fazer apenas 1 request por aposta.
     Retorna (gols_casa, gols_fora) ou None.
     """
+    # Resolve qual liga consultar — 1 request apenas
+    liga_key = _resolver_key_liga(liga_nome)
+
+    if not liga_key:
+        # Liga não mapeada — não tem cobertura na The Odds API
+        return None
+
     home_lower = home.lower()
     away_lower = away.lower()
     data_str   = data_jogo_str[:10] if data_jogo_str else ""
 
-    for liga_key in LIGAS_THE_ODDS_API:
-        try:
-            resp = requests.get(
-                f"{BASE_THE_ODDS_API}/sports/{liga_key}/scores/",
-                params={
-                    "apiKey":   config.ODDS_API_KEY,
-                    "daysFrom": 3,
-                },
-                timeout=15
-            )
+    try:
+        resp = requests.get(
+            f"{BASE_THE_ODDS_API}/sports/{liga_key}/scores/",
+            params={
+                "apiKey":   config.ODDS_API_KEY,
+                "daysFrom": 3,
+            },
+            timeout=15
+        )
 
-            if resp.status_code == 401:
-                print(f"   ⚠️ The Odds API: chave inválida")
+        if resp.status_code == 401:
+            print(f"   ⚠️ The Odds API: chave inválida ou sem requests restantes")
+            return None
+
+        if resp.status_code == 422:
+            print(f"   ⚠️ The Odds API: liga '{liga_key}' não reconhecida")
+            return None
+
+        if resp.status_code != 200:
+            return None
+
+        eventos = resp.json()
+        if not isinstance(eventos, list) or not eventos:
+            return None
+
+        for ev in eventos:
+            ev_home = ev.get("home_team", "").lower()
+            ev_away = ev.get("away_team", "").lower()
+            ev_data = ev.get("commence_time", "")[:10]
+
+            # Filtra por data
+            if data_str and ev_data != data_str:
+                continue
+
+            # Match fuzzy por nome
+            home_match = (home_lower in ev_home or ev_home in home_lower)
+            away_match = (away_lower in ev_away or ev_away in away_lower)
+
+            if not (home_match and away_match):
+                continue
+
+            # Encontrou — verifica se terminou
+            if not ev.get("completed", False):
                 return None
 
-            if resp.status_code != 200:
-                continue
+            scores = ev.get("scores")
+            if not scores:
+                return None
 
-            eventos = resp.json()
-            if not isinstance(eventos, list) or not eventos:
-                continue
+            gc = gf = None
+            for s in scores:
+                s_name = s.get("name", "").lower()
+                if s_name in ev_home or ev_home in s_name:
+                    gc = s.get("score")
+                elif s_name in ev_away or ev_away in s_name:
+                    gf = s.get("score")
 
-            for ev in eventos:
-                ev_home = ev.get("home_team", "").lower()
-                ev_away = ev.get("away_team", "").lower()
-                ev_data = ev.get("commence_time", "")[:10]
+            if gc is not None and gf is not None:
+                return int(gc), int(gf)
 
-                # Filtra por data
-                if data_str and ev_data != data_str:
-                    continue
-
-                # Match fuzzy por nome
-                home_match = (home_lower in ev_home or ev_home in home_lower)
-                away_match = (away_lower in ev_away or ev_away in away_lower)
-
-                if not (home_match and away_match):
-                    continue
-
-                # Encontrou — verifica se terminou
-                if not ev.get("completed", False):
-                    return None
-
-                scores = ev.get("scores")
-                if not scores:
-                    return None
-
-                gc = gf = None
-                for s in scores:
-                    s_name = s.get("name", "").lower()
-                    if s_name in ev_home or ev_home in s_name:
-                        gc = s.get("score")
-                    elif s_name in ev_away or ev_away in s_name:
-                        gf = s.get("score")
-
-                if gc is not None and gf is not None:
-                    return int(gc), int(gf)
-
-        except Exception as e:
-            print(f"   ⚠️ Erro The Odds API scores ({liga_key}): {e}")
-            continue
+    except Exception as e:
+        print(f"   ⚠️ Erro The Odds API scores ({liga_key}): {e}")
 
     return None
 
@@ -242,8 +290,7 @@ def buscar_resultado_the_odds_api(home, away, data_jogo_str):
 def buscar_resultado_odds_api_io(event_id):
     """
     Fallback: busca resultado via odds-api.io.
-    Usado apenas quando The Odds API não cobre a liga.
-    Consome cota — usar com parcimônia.
+    Usado quando The Odds API não cobre a liga ou está sem requests.
     """
     try:
         resp = requests.get(
@@ -308,21 +355,21 @@ def buscar_resultado_odds_api_io(event_id):
     return None
 
 
-def buscar_resultado(event_id, home=None, away=None, data_jogo_str=None):
+def buscar_resultado(event_id, home=None, away=None, data_jogo_str=None, liga_nome=None):
     """
     Ponto de entrada para busca de resultado.
 
-    Estratégia:
-      1. The Odds API /scores (grátis) — busca por nome de time
-      2. odds-api.io /events (fallback, consome cota) — busca por event_id
+    Estratégia de custo mínimo:
+      1. The Odds API /scores — 1 request por aposta (via mapeamento liga→key)
+      2. odds-api.io /events  — fallback, só se liga não mapeada ou API sem cota
     """
-    # Tentativa 1: The Odds API por nome de time (grátis)
-    if home and away:
-        resultado = buscar_resultado_the_odds_api(home, away, data_jogo_str or "")
+    # Tentativa 1: The Odds API — 1 request, custo zero da cota principal
+    if home and away and liga_nome:
+        resultado = buscar_resultado_the_odds_api(home, away, data_jogo_str or "", liga_nome)
         if resultado is not None:
             return resultado
 
-    # Tentativa 2: odds-api.io por event_id (fallback)
+    # Tentativa 2: odds-api.io — fallback
     print(f"   🔄 The Odds API não encontrou — tentando odds-api.io...")
     return buscar_resultado_odds_api_io(event_id)
 

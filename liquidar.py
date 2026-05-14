@@ -130,7 +130,7 @@ def liquidar_apostas():
             nao_finalizadas += 1
             continue
 
-        resultado = odds_client.buscar_resultado(event_id, home=casa, away=fora, data_jogo_str=data_jogo)
+        resultado = odds_client.buscar_resultado(event_id, home=casa, away=fora, data_jogo_str=data_jogo, liga_nome=liga)
 
         if resultado is None:
             # Calcula quantos dias se passaram desde o jogo
