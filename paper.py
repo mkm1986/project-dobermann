@@ -91,13 +91,33 @@ def rodar_paper_betting():
         print(f"   Liga:     {liga}")
         print(f"   Aposta:   {bet_side} @ {odd:.2f} | EV API: {ev_api:.2%} | {bookmaker}")
 
-        # Verifica duplicata
+        # ── FILTRO 1: Odd mínima ──────────────────────────────
+        # Garante que apenas odds acima do mínimo configurado entram,
+        # independente do que a API retornar.
+        if odd < config.MIN_ODD_ML:
+            print(f"   ❌ Odd {odd:.2f} abaixo do mínimo ({config.MIN_ODD_ML:.2f})\n")
+            apostas_ignoradas += 1
+            continue
+
+        # ── FILTRO 2: Anti-duplicata por jogo ────────────────
+        # Bloqueia qualquer nova aposta no mesmo jogo (home x away),
+        # independente do event_id ou do lado (home/away).
+        # Isso evita apostar nas duas pontas do mesmo jogo.
+        c.execute("""
+            SELECT id FROM paper_bets
+            WHERE time_casa=? AND time_fora=? AND status='Pendente'
+        """, (home, away))
+        if c.fetchone():
+            print(f"   ⏭️  Jogo já registrado (anti-duplicata)\n")
+            continue
+
+        # Verifica também pelo event_id como segunda camada
         c.execute("""
             SELECT id FROM paper_bets
             WHERE event_id=? AND status='Pendente'
         """, (event_id,))
         if c.fetchone():
-            print(f"   ⏭️  Já registrada\n")
+            print(f"   ⏭️  Já registrada (event_id)\n")
             continue
 
         # Detecta se é time reserva
