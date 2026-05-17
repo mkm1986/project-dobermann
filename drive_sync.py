@@ -4,26 +4,27 @@ import json
 import time
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
-from google.oauth2.credentials import Credentials
+from google.oauth2 import service_account
 
 PASTA_ID = "161T-JwbL9a2kLozkzlrH_b5LfJSawile"
 ARQUIVOS = ["apostas.db", "cache_odds.json"]
+SCOPES   = ["https://www.googleapis.com/auth/drive"]
 
 def autenticar():
-    token_json = os.environ.get("GOOGLE_TOKEN")
-    if token_json:
-        info = json.loads(token_json)
+    """
+    Autentica via Service Account — não expira, não depende de sessão.
+    Lê as credenciais da variável de ambiente GOOGLE_SERVICE_ACCOUNT
+    (GitHub Actions) ou do arquivo service_account.json (local).
+    """
+    sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT")
+    if sa_json:
+        info = json.loads(sa_json)
     else:
-        with open("token_drive.json") as f:
+        with open("service_account.json") as f:
             info = json.load(f)
 
-    creds = Credentials(
-        token         = info.get("token"),
-        refresh_token = info.get("refresh_token"),
-        token_uri     = info.get("token_uri", "https://oauth2.googleapis.com/token"),
-        client_id     = info.get("client_id"),
-        client_secret = info.get("client_secret"),
-        scopes        = info.get("scopes"),
+    creds = service_account.Credentials.from_service_account_info(
+        info, scopes=SCOPES
     )
     return build("drive", "v3", credentials=creds)
 
@@ -41,7 +42,6 @@ def baixar_arquivo(service, nome, forcar=False):
         print(f"📭 {nome} não encontrado no Drive.")
         return False
 
-    # Compara data de modificação
     if not forcar and os.path.exists(nome):
         from datetime import datetime, timezone
         modified_drive = arquivo.get("modifiedTime", "")
