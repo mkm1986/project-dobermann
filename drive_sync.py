@@ -11,14 +11,12 @@ ARQUIVOS = ["apostas.db", "cache_odds.json"]
 SCOPES   = ["https://www.googleapis.com/auth/drive"]
 
 def autenticar():
+    """
+    Autentica via Service Account — não expira, não depende de sessão.
+    Lê as credenciais da variável de ambiente GOOGLE_SERVICE_ACCOUNT
+    (GitHub Actions) ou do arquivo service_account.json (local).
+    """
     sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT")
-    
-    # DEBUG — remover após confirmar funcionamento
-    if sa_json:
-        print(f"✅ GOOGLE_SERVICE_ACCOUNT encontrada ({len(sa_json)} chars)")
-    else:
-        print("❌ GOOGLE_SERVICE_ACCOUNT não encontrada — tentando arquivo local")
-
     if sa_json:
         info = json.loads(sa_json)
     else:
