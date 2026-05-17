@@ -92,17 +92,16 @@ def rodar_paper_betting():
         print(f"   Aposta:   {bet_side} @ {odd:.2f} | EV API: {ev_api:.2%} | {bookmaker}")
 
         # ── FILTRO 1: Odd mínima ──────────────────────────────
-        # Garante que apenas odds acima do mínimo configurado entram,
-        # independente do que a API retornar.
+        # Rejeita qualquer sinal abaixo do mínimo configurado.
+        # Esse filtro é absoluto — não pode ser sobreposto pelo modelo.
         if odd < config.MIN_ODD_ML:
             print(f"   ❌ Odd {odd:.2f} abaixo do mínimo ({config.MIN_ODD_ML:.2f})\n")
             apostas_ignoradas += 1
             continue
 
         # ── FILTRO 2: Anti-duplicata por jogo ────────────────
-        # Bloqueia qualquer nova aposta no mesmo jogo (home x away),
-        # independente do event_id ou do lado (home/away).
-        # Isso evita apostar nas duas pontas do mesmo jogo.
+        # Bloqueia qualquer nova aposta no mesmo jogo (home x away)
+        # independente do event_id ou lado — evita apostar nas duas pontas.
         c.execute("""
             SELECT id FROM paper_bets
             WHERE time_casa=? AND time_fora=? AND status='Pendente'
