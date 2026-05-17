@@ -4,27 +4,26 @@ import json
 import time
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
-from google.oauth2 import service_account
+from google.oauth2.credentials import Credentials
 
 PASTA_ID = "161T-JwbL9a2kLozkzlrH_b5LfJSawile"
 ARQUIVOS = ["apostas.db", "cache_odds.json"]
-SCOPES   = ["https://www.googleapis.com/auth/drive"]
 
 def autenticar():
-    """
-    Autentica via Service Account — não expira, não depende de sessão.
-    Lê as credenciais da variável de ambiente GOOGLE_SERVICE_ACCOUNT
-    (GitHub Actions) ou do arquivo service_account.json (local).
-    """
-    sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT")
-    if sa_json:
-        info = json.loads(sa_json)
+    token_json = os.environ.get("GOOGLE_TOKEN")
+    if token_json:
+        info = json.loads(token_json)
     else:
-        with open("service_account.json") as f:
+        with open("token_drive.json") as f:
             info = json.load(f)
 
-    creds = service_account.Credentials.from_service_account_info(
-        info, scopes=SCOPES
+    creds = Credentials(
+        token         = info.get("token"),
+        refresh_token = info.get("refresh_token"),
+        token_uri     = info.get("token_uri", "https://oauth2.googleapis.com/token"),
+        client_id     = info.get("client_id"),
+        client_secret = info.get("client_secret"),
+        scopes        = info.get("scopes"),
     )
     return build("drive", "v3", credentials=creds)
 
