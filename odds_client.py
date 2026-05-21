@@ -496,7 +496,14 @@ def buscar_value_bets(min_ev=None):
 
         if _cache_valido(chave_cache):
             print(f"   📦 Cache válido para {bookmaker} — sem request")
-            todos_sinais.extend(_cache.get(chave_cache, []))
+            # Aplica filtro de odd mesmo no cache — garante que mudanças
+            # de config.MIN_ODD_ML são respeitadas imediatamente
+            sinais_cache = [
+                s for s in _cache.get(chave_cache, [])
+                if s.get("odd", 0) >= config.MIN_ODD_ML
+                and s.get("odd", 0) <= config.MAX_ODD
+            ]
+            todos_sinais.extend(sinais_cache)
             continue
 
         try:
