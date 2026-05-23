@@ -63,11 +63,34 @@ jobs:
           print("config.py criado com sucesso")
           PYEOF
 
-      - name: Baixar banco do Google Drive
+      - name: Criar service_account.json
         env:
-          GOOGLE_TOKEN: ${{ secrets.GOOGLE_TOKEN }}
+          SA_PRIVATE_KEY: ${{ secrets.SA_PRIVATE_KEY }}
+          SA_PRIVATE_KEY_ID: ${{ secrets.SA_PRIVATE_KEY_ID }}
+        run: |
+          python - <<'PYEOF'
+          import os, json
+          sa = {
+              "type": "service_account",
+              "project_id": "project-dobermann-495202",
+              "private_key_id": os.environ["SA_PRIVATE_KEY_ID"],
+              "private_key": os.environ["SA_PRIVATE_KEY"].replace("\\n", "\n"),
+              "client_email": "dobermann-sync@project-dobermann-495202.iam.gserviceaccount.com",
+              "client_id": "118363561173291608863",
+              "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+              "token_uri": "https://oauth2.googleapis.com/token",
+              "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+              "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/dobermann-sync%40project-dobermann-495202.iam.gserviceaccount.com",
+              "universe_domain": "googleapis.com"
+          }
+          with open("service_account.json", "w") as f:
+              json.dump(sa, f)
+          print("service_account.json criado com sucesso")
+          PYEOF
+
+      - name: Baixar banco do Google Drive
         run: python drive_sync.py
-      
+
       - name: Rodar liquidador
         run: python liquidar.py
 
@@ -75,6 +98,4 @@ jobs:
         run: python paper.py
 
       - name: Salvar banco no Google Drive
-        env:
-          GOOGLE_TOKEN: ${{ secrets.GOOGLE_TOKEN }}
         run: python drive_sync.py subir

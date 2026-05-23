@@ -4,26 +4,23 @@ import json
 import time
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
-from google.oauth2.credentials import Credentials
+from google.oauth2 import service_account
 
 PASTA_ID = "161T-JwbL9a2kLozkzlrH_b5LfJSawile"
 ARQUIVOS = ["apostas.db", "cache_odds.json"]
+SCOPES   = ["https://www.googleapis.com/auth/drive"]
 
 def autenticar():
-    token_json = os.environ.get("GOOGLE_TOKEN")
-    if token_json:
-        info = json.loads(token_json)
-    else:
-        with open("token_drive.json") as f:
-            info = json.load(f)
+    """
+    Autentica via Service Account.
+    Lê o arquivo service_account.json gerado pelo workflow
+    ou disponível localmente.
+    """
+    with open("service_account.json") as f:
+        info = json.load(f)
 
-    creds = Credentials(
-        token         = info.get("token"),
-        refresh_token = info.get("refresh_token"),
-        token_uri     = info.get("token_uri", "https://oauth2.googleapis.com/token"),
-        client_id     = info.get("client_id"),
-        client_secret = info.get("client_secret"),
-        scopes        = info.get("scopes"),
+    creds = service_account.Credentials.from_service_account_info(
+        info, scopes=SCOPES
     )
     return build("drive", "v3", credentials=creds)
 
@@ -45,12 +42,10 @@ def baixar_arquivo(service, nome, forcar=False):
         from datetime import datetime, timezone
         modified_drive = arquivo.get("modifiedTime", "")
         modified_local = os.path.getmtime(nome)
-
         try:
             dt_drive = datetime.fromisoformat(
                 modified_drive.replace("Z", "+00:00")
             ).timestamp()
-
             if modified_local >= dt_drive:
                 print(f"⏭️  {nome} local é mais recente — mantendo versão local.")
                 return False
@@ -96,21 +91,18 @@ def subir_arquivo(service, nome):
     return True
 
 def sincronizar_antes():
-    """Baixa do Drive apenas se for mais recente que o arquivo local."""
     print("🔄 Sincronizando arquivos do Drive...")
     service = autenticar()
     for nome in ARQUIVOS:
         baixar_arquivo(service, nome)
 
 def sincronizar_depois():
-    """Sobe arquivos locais para o Drive."""
     print("🔄 Salvando arquivos no Drive...")
     service = autenticar()
     for nome in ARQUIVOS:
         subir_arquivo(service, nome)
 
 def sincronizar_forcar_download():
-    """Força download do Drive independente da data local."""
     print("🔄 Forçando download do Drive...")
     service = autenticar()
     for nome in ARQUIVOS:
