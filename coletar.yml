@@ -19,6 +19,31 @@ jobs:
       - name: Instalar dependencias
         run: pip install requests scipy numpy google-api-python-client google-auth google-auth-oauthlib
 
+      - name: Criar service_account.json
+        env:
+          SA_PRIVATE_KEY: ${{ secrets.SA_PRIVATE_KEY }}
+          SA_PRIVATE_KEY_ID: ${{ secrets.SA_PRIVATE_KEY_ID }}
+        run: |
+          python - <<'PYEOF'
+          import os, json
+          sa = {
+              "type": "service_account",
+              "project_id": "project-dobermann-495202",
+              "private_key_id": os.environ["SA_PRIVATE_KEY_ID"],
+              "private_key": os.environ["SA_PRIVATE_KEY"].replace("\\n", "\n"),
+              "client_email": "dobermann-sync@project-dobermann-495202.iam.gserviceaccount.com",
+              "client_id": "118363561173291608863",
+              "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+              "token_uri": "https://oauth2.googleapis.com/token",
+              "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+              "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/dobermann-sync%40project-dobermann-495202.iam.gserviceaccount.com",
+              "universe_domain": "googleapis.com"
+          }
+          with open("service_account.json", "w") as f:
+              json.dump(sa, f)
+          print("service_account.json criado com sucesso")
+          PYEOF
+
       - name: Criar config
         env:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
@@ -60,31 +85,6 @@ jobs:
           with open("config.py", "w") as f:
               f.write("\n".join(lines))
           print("config.py criado")
-          PYEOF
-
-      - name: Criar service_account.json
-        env:
-          SA_PRIVATE_KEY: ${{ secrets.SA_PRIVATE_KEY }}
-          SA_PRIVATE_KEY_ID: ${{ secrets.SA_PRIVATE_KEY_ID }}
-        run: |
-          python - <<'PYEOF'
-          import os, json
-          sa = {
-              "type": "service_account",
-              "project_id": "project-dobermann-495202",
-              "private_key_id": os.environ["SA_PRIVATE_KEY_ID"],
-              "private_key": os.environ["SA_PRIVATE_KEY"].replace("\\n", "\n"),
-              "client_email": "dobermann-sync@project-dobermann-495202.iam.gserviceaccount.com",
-              "client_id": "118363561173291608863",
-              "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-              "token_uri": "https://oauth2.googleapis.com/token",
-              "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-              "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/dobermann-sync%40project-dobermann-495202.iam.gserviceaccount.com",
-              "universe_domain": "googleapis.com"
-          }
-          with open("service_account.json", "w") as f:
-              json.dump(sa, f)
-          print("service_account.json criado com sucesso")
           PYEOF
 
       - name: Baixar banco do Google Drive
